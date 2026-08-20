@@ -1,5 +1,4 @@
 using System.Drawing.Drawing2D;
-using System.Text.RegularExpressions;
 
 namespace NTFSReport;
 
@@ -22,98 +21,129 @@ public sealed partial class MainForm : Form
     private readonly List<FolderRow> _folderRows = new();
     private FolderRow? _selectedRow;
 
-    // -----------------------------------------------------------------------
-    // D2 Theme palette
-    // -----------------------------------------------------------------------
-    private static readonly Color ClrSlate      = Color.FromArgb(30, 41, 59);    // #1e293b header / primary
-    private static readonly Color ClrSlateDark  = Color.FromArgb(15, 23, 42);    // #0f172a hover
-    private static readonly Color ClrSlateText  = Color.FromArgb(148, 163, 184); // #94a3b8 muted on dark
-    private static readonly Color ClrGreen      = Color.FromArgb(21, 128, 61);   // #15803d save html
-    private static readonly Color ClrAmber      = Color.FromArgb(180, 83, 9);    // #b45309 broken inheritance
-    private static readonly Color ClrRed        = Color.FromArgb(220, 53, 69);   // cancel
-    private static readonly Color ClrChrome     = Color.FromArgb(244, 244, 245); // #f4f4f5 secondary btn bg
-    private static readonly Color ClrChromeBrdr = Color.FromArgb(212, 212, 216); // #d4d4d8 secondary btn border
-    private static readonly Color ClrChromeText = Color.FromArgb(113, 113, 122); // #71717a secondary btn text
-    private static readonly Color ClrBody       = Color.FromArgb(250, 250, 250); // #fafafa panel bg
-    private static readonly Color ClrInk        = Color.FromArgb(51, 65, 85);    // #334155 body text
+    // Ribbon + workspace state
+    private static readonly string[] RibbonTabNames = { "Analyze", "Compare", "Export" };
+    private readonly List<Rectangle> _ribbonTabRects = new();
+    private Rectangle _aboutRect;
+    private int  _activeRibbonTab;
+    private int  _mode;              // 0 = Analyze, 1 = Compare
+    private bool _eventLogExpanded;
+    private bool _compareLaidOut;
 
     // -----------------------------------------------------------------------
-    // Controls — shared
+    // Palette — one ramp. Slate is primary; amber is reserved for broken
+    // inheritance and red for destructive/cancel. Nothing else gets a colour.
     // -----------------------------------------------------------------------
-    private MenuStrip            menuStrip1   = null!;
-    private Panel                pnlHeader    = null!;
-    private TabControl           tabMain      = null!;
-    private TabPage              tabAnalyze   = null!;
-    private TabPage              tabCompare   = null!;
-    private StatusStrip          statusStrip1 = null!;
-    private ToolStripStatusLabel statusMain   = null!;
-    private ToolStripStatusLabel statusVer    = null!;
+    private static readonly Color ClrSlate       = Color.FromArgb(30, 41, 59);
+    private static readonly Color ClrSlateDark   = Color.FromArgb(15, 23, 42);
+    private static readonly Color ClrSlateText   = Color.FromArgb(203, 213, 225);
+    private static readonly Color ClrGreen       = Color.FromArgb(21, 128, 61);
+    private static readonly Color ClrAmber       = Color.FromArgb(180, 83, 9);
+    private static readonly Color ClrRed         = Color.FromArgb(185, 28, 28);
+    private static readonly Color ClrChrome      = Color.FromArgb(244, 244, 245);
+    private static readonly Color ClrChromeBrdr  = Color.FromArgb(212, 212, 216);
+    private static readonly Color ClrMuted       = Color.FromArgb(113, 113, 122);
+    private static readonly Color ClrBody        = Color.FromArgb(250, 250, 250);
+    private static readonly Color ClrInk         = Color.FromArgb(51, 65, 85);
+    private static readonly Color ClrRule        = Color.FromArgb(226, 232, 240);
+    private static readonly Color ClrHdrBg       = Color.FromArgb(241, 245, 249);
 
-    // Analyze options
-    private Panel         pnlAnalyzeOpts   = null!;
-    private Label         lblPath          = null!;
+    // Three sizes, one family.
+    private static readonly Font FntSmall   = new("Segoe UI", 8.25f);
+    private static readonly Font FntBody    = new("Segoe UI", 9f);
+    private static readonly Font FntBodyB   = new("Segoe UI", 9f, FontStyle.Bold);
+    private static readonly Font FntTab     = new("Segoe UI", 9.75f);
+
+    // Ribbon geometry
+    private const int TabStripH  = 30;
+    private const int RibbonBodyH = 88;
+    private const int EventBarH  = 26;
+
+    // -----------------------------------------------------------------------
+    // Controls — chrome
+    // -----------------------------------------------------------------------
+    private Panel                pnlRibbon      = null!;
+    private Panel                pnlRibbonTabs  = null!;
+    private Panel                pnlRibbonBody  = null!;
+    private FlowLayoutPanel      flpAnalyzeRib  = null!;
+    private FlowLayoutPanel      flpCompareRib  = null!;
+    private FlowLayoutPanel      flpExportRib   = null!;
+    private Panel                pnlWorkspace   = null!;
+    private Panel                pnlAnalyzeWork = null!;
+    private Panel                pnlCompareWork = null!;
+    private StatusStrip          statusStrip1   = null!;
+    private ToolStripStatusLabel statusMain     = null!;
+    private ToolStripStatusLabel statusVer      = null!;
+
+    // Event log
+    private Panel   pnlEventLog   = null!;
+    private Panel   pnlEventHdr   = null!;
+    private Label   lblEventSum   = null!;
+    private Button  btnEventToggle = null!;
+    private ListBox lstEvents     = null!;
+
+    // Analyze ribbon
     private TextBox       txtScanPath      = null!;
     private Button        btnBrowseScan    = null!;
-    private Label         lblOutput        = null!;
-    private TextBox       txtOutputPath    = null!;
-    private Button        btnBrowseOutput  = null!;
-    private Button        btnDesktopOutput = null!;
-    private CheckBox      chkAutoOpen      = null!;
-    private Label         lblDepth         = null!;
-    private NumericUpDown nudDepth         = null!;
-    private CheckBox      chkExcludeSystem = null!;
     private Button        btnScan          = null!;
     private Button        btnCancelScan    = null!;
-    private Button        btnExportHtml    = null!;
-    private Button        btnExportCsv     = null!;
-    private Button        btnBrokenFilter  = null!;
-    private Button        btnResetFilter   = null!;
-    private TextBox       txtSearch        = null!;
+    private ProgressBar   progressScan     = null!;
+    private NumericUpDown nudDepth         = null!;
+    private CheckBox      chkExcludeSystem = null!;
     private TrackBar      trkThreads       = null!;
     private Label         lblThreads       = null!;
-    private ProgressBar   progressScan     = null!;
-    private Label         lblScanStatus    = null!;
+    private Button        btnBrokenFilter  = null!;
+    private Button        btnResetFilter   = null!;
 
-    // Analyze results — grid-based folder navigator
+    // Compare ribbon
+    private TextBox       txtPath1          = null!;
+    private TextBox       txtPath2          = null!;
+    private Button        btnBrowse1        = null!;
+    private Button        btnBrowse2        = null!;
+    private Button        btnCompare        = null!;
+    private Button        btnCancelCompare  = null!;
+    private ProgressBar   progressCompare   = null!;
+    private NumericUpDown nudDepthC         = null!;
+    private CheckBox      chkExcludeSystemC = null!;
+    private Button        btnChangesOnly    = null!;
+    private Button        btnResetCompare   = null!;
+
+    // Export ribbon
+    private Button   btnExportHtml    = null!;
+    private Button   btnExportCsv     = null!;
+    private Button   btnDesktopOutput = null!;
+    private Button   btnBrowseOutput  = null!;
+    private CheckBox chkAutoOpen      = null!;
+    private Button   btnOpenReport    = null!;
+    private Label    lblExportTarget  = null!;
+    private TextBox  txtOutputPath    = null!;
+
+    // Analyze workspace
+    private TextBox        txtSearch     = null!;
     private SplitContainer splitResults  = null!;
     private DataGridView   folderGrid    = null!;
-    private Panel          pnlPermHeader = null!;
-    private Label          lblFolderPath = null!;
     private DataGridView   gridPerms     = null!;
+    private Panel          pnlDetails    = null!;
+    private Label          lblDetPath    = null!;
+    private Label          lblDetOwner   = null!;
+    private Label          lblDetMod     = null!;
+    private Label          lblDetInherit = null!;
+    private Label          lblFolderPath = null!;
+    private Label          lblScanStatus = null!;
 
-    // Compare tab
-    private Panel         pnlCompareOpts       = null!;
-    private Label         lblPath1             = null!;
-    private TextBox       txtPath1             = null!;
-    private Button        btnBrowse1           = null!;
-    private Label         lblPath2             = null!;
-    private TextBox       txtPath2             = null!;
-    private Button        btnBrowse2           = null!;
-    private Label         lblDepthC            = null!;
-    private NumericUpDown nudDepthC            = null!;
-    private CheckBox      chkExcludeSystemC    = null!;
-    private Button        btnCompare           = null!;
-    private Button        btnCancelCompare     = null!;
-    private Button        btnExportCompareHtml = null!;
-    private Button        btnExportCompareCsv  = null!;
-    private ProgressBar   progressCompare      = null!;
-    private Label         lblCompareStatus     = null!;
-
-    private SplitContainer splitCompare    = null!;
-    private Panel          pnlLeftHeader   = null!;
-    private Label          lblLeftTitle    = null!;
-    private SplitContainer splitLeft       = null!;
-    private TreeView       treeLeft        = null!;
-    private Panel          pnlLeftPermHdr  = null!;
-    private Label          lblLeftFolder   = null!;
-    private DataGridView   gridLeft        = null!;
-    private Panel          pnlRightHeader  = null!;
-    private Label          lblRightTitle   = null!;
-    private SplitContainer splitRight      = null!;
-    private TreeView       treeRight       = null!;
-    private Panel          pnlRightPermHdr = null!;
-    private Label          lblRightFolder  = null!;
-    private DataGridView   gridRight       = null!;
+    // Compare workspace
+    private SplitContainer splitCompare     = null!;
+    private SplitContainer splitLeft        = null!;
+    private SplitContainer splitRight       = null!;
+    private TreeView       treeLeft         = null!;
+    private TreeView       treeRight        = null!;
+    private DataGridView   gridLeft         = null!;
+    private DataGridView   gridRight        = null!;
+    private Label          lblLeftTitle     = null!;
+    private Label          lblRightTitle    = null!;
+    private Label          lblLeftFolder    = null!;
+    private Label          lblRightFolder   = null!;
+    private Label          lblCompareStatus = null!;
 
     // -----------------------------------------------------------------------
     // FolderRow — one visible row in the folder grid
@@ -126,13 +156,43 @@ public sealed partial class MainForm : Form
     }
 
     // -----------------------------------------------------------------------
+    // RibbonGroup — fixed-size panel with a caption along the bottom and a
+    // hairline divider on its right edge. This is what makes the command bar
+    // read as a ribbon rather than a toolbar.
+    // -----------------------------------------------------------------------
+    private sealed class RibbonGroup : Panel
+    {
+        private readonly string _caption;
+
+        public RibbonGroup(string caption, int width)
+        {
+            _caption     = caption;
+            Size         = new Size(width, RibbonBodyH);
+            Margin       = new Padding(0);
+            BackColor    = ClrBody;
+            DoubleBuffered = true;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            TextRenderer.DrawText(e.Graphics, _caption, FntSmall,
+                new Rectangle(0, Height - 18, Width - 1, 16), ClrMuted,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+
+            using var pen = new Pen(ClrRule, 1);
+            e.Graphics.DrawLine(pen, Width - 1, 8, Width - 1, Height - 22);
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Constructor
     // -----------------------------------------------------------------------
     public MainForm()
     {
         InitializeComponent();
-        ApplyTheme();
         SetDefaultOutputPath();
+        SelectRibbonTab(0);
     }
 
     // -----------------------------------------------------------------------
@@ -142,13 +202,15 @@ public sealed partial class MainForm : Form
     {
         SuspendLayout();
 
-        Text          = "NTFS Folder Audit — ProDirt";
+        Text          = "NTFS Folder Audit";
         Size          = new Size(1300, 820);
-        MinimumSize   = new Size(900, 600);
+        MinimumSize   = new Size(1000, 620);
         StartPosition = FormStartPosition.CenterScreen;
         WindowState   = FormWindowState.Maximized;
-        Font          = new Font("Segoe UI", 9.5f);
-        BackColor     = Color.FromArgb(245, 245, 245);
+        Font          = FntBody;
+        BackColor     = Color.White;
+        AutoScaleMode = AutoScaleMode.Dpi;
+
         try
         {
             using var stream = System.Reflection.Assembly.GetExecutingAssembly()
@@ -157,427 +219,556 @@ public sealed partial class MainForm : Form
         }
         catch { }
 
-        // ================================================================
-        // MENU
-        // ================================================================
-        menuStrip1 = new MenuStrip { Font = new Font("Segoe UI", 9.5f) };
-        var mnuFile  = new ToolStripMenuItem("File");
-        var mnuTools = new ToolStripMenuItem("Tools");
-        var mnuHelp  = new ToolStripMenuItem("Help");
+        BuildRibbon();
+        BuildAnalyzeWorkspace();
+        BuildCompareWorkspace();
+        BuildEventLog();
 
-        mnuFile.DropDownItems.Add("New Scan", null, (s, e) => { tabMain.SelectedIndex = 0; txtScanPath.Focus(); });
-        mnuFile.DropDownItems.Add(new ToolStripSeparator());
-        mnuFile.DropDownItems.Add("Open HTML Report…", null, MnuOpenReport_Click);
-        mnuFile.DropDownItems.Add(new ToolStripSeparator());
-        mnuFile.DropDownItems.Add("Exit", null, (s, e) => Close());
+        pnlWorkspace = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+        pnlWorkspace.Controls.Add(pnlAnalyzeWork);
+        pnlWorkspace.Controls.Add(pnlCompareWork);
 
-        mnuTools.DropDownItems.Add("Compare Two Paths…", null, (s, e) => tabMain.SelectedIndex = 1);
-        mnuTools.DropDownItems.Add(new ToolStripSeparator());
-        mnuTools.DropDownItems.Add("Copy Path to Clipboard", null, (s, e) =>
-        {
-            if (!string.IsNullOrEmpty(txtScanPath.Text)) Clipboard.SetText(txtScanPath.Text);
-        });
-
-        mnuHelp.DropDownItems.Add("About NTFS Folder Audit", null, MnuAbout_Click);
-        mnuHelp.DropDownItems.Add("ProDirt Website", null, (s, e) =>
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://prodirt-llc.github.io") { UseShellExecute = true }));
-
-        menuStrip1.Items.AddRange([mnuFile, mnuTools, mnuHelp]);
-
-        // ================================================================
-        // BRAND HEADER BAND (D2)
-        // ================================================================
-        pnlHeader = new Panel { Dock = DockStyle.Top, Height = 52, BackColor = ClrSlate };
-        pnlHeader.Paint += PnlBrandHeader_Paint;
-
-        var lblBrandTitle = new Label
-        {
-            Text      = "NTFS Folder Audit",
-            AutoSize  = true,
-            Location  = new Point(52, 9),
-            Font      = new Font("Segoe UI", 13.5f, FontStyle.Regular),
-            ForeColor = Color.FromArgb(241, 245, 249),
-            BackColor = Color.Transparent
-        };
-        var lblBrandSub = new Label
-        {
-            Text      = "by ProDirt",
-            AutoSize  = true,
-            Location  = new Point(54, 31),
-            Font      = new Font("Segoe UI", 8f),
-            ForeColor = ClrSlateText,
-            BackColor = Color.Transparent
-        };
-        pnlHeader.Controls.Add(lblBrandTitle);
-        pnlHeader.Controls.Add(lblBrandSub);
-
-        // ================================================================
-        // STATUS STRIP
-        // ================================================================
-        statusStrip1 = new StatusStrip();
+        statusStrip1 = new StatusStrip { BackColor = ClrBody };
         statusMain   = new ToolStripStatusLabel("Ready") { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
-        statusVer    = new ToolStripStatusLabel("NTFS Folder Audit v1.0") { ForeColor = Color.FromArgb(107, 114, 128) };
+        statusVer    = new ToolStripStatusLabel("NTFS Folder Audit 1.0") { ForeColor = ClrMuted };
         statusStrip1.Items.AddRange([statusMain, statusVer]);
 
-        // ================================================================
-        // TAB CONTROL
-        // ================================================================
-        tabMain    = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 9.5f) };
-        tabAnalyze = new TabPage("  Analyze  ");
-        tabCompare = new TabPage("  Compare  ");
-        tabMain.TabPages.Add(tabAnalyze);
-        tabMain.TabPages.Add(tabCompare);
-
-        // ================================================================
-        // ANALYZE TAB — Left rail (sidebar): Scan + Export groups
-        // ================================================================
-        pnlAnalyzeOpts = new Panel { Dock = DockStyle.Left, Width = 216, BackColor = ClrBody, Padding = new Padding(14, 12, 14, 12) };
-        pnlAnalyzeOpts.Paint += PnlRail_Paint;
-
-        int railW = 216 - 28;   // inner content width
-        int cy = 4;             // running vertical cursor
-
-        // --- SCAN group ---
-        var lblScanHdr = MakeRailHeader("SCAN", 0, cy); cy += 22;
-        txtScanPath = new TextBox { Location = new Point(0, cy), Size = new Size(railW, 26), Font = new Font("Segoe UI", 9.5f), PlaceholderText = @"C:\Share or \\server\share" }; cy += 32;
-        btnBrowseScan = MakeChromeButton("Browse folder…", 0, cy, railW, 28); cy += 36;
-        btnBrowseScan.Click += BtnBrowseScan_Click;
-
-        lblDepth = MakeLabel("Depth", 0, cy + 4, 44);
-        nudDepth = new NumericUpDown { Location = new Point(48, cy), Size = new Size(48, 26), Minimum = 1, Maximum = 50, Value = 5, Font = new Font("Segoe UI", 9f) };
-        chkExcludeSystem = new CheckBox { Text = "System folders", Location = new Point(104, cy + 3), Size = new Size(84, 22), Font = new Font("Segoe UI", 8.5f), ForeColor = ClrInk }; cy += 34;
-
-        lblThreads = new Label { Text = "Threads: Auto", Location = new Point(0, cy), Size = new Size(railW, 16), ForeColor = ClrChromeText, Font = new Font("Segoe UI", 8f) }; cy += 18;
-        trkThreads = new TrackBar { Location = new Point(-6, cy), Size = new Size(railW + 12, 30), TickFrequency = 8, SmallChange = 1, LargeChange = 8, TickStyle = TickStyle.None, AutoSize = false };
-        trkThreads.Minimum = 0; trkThreads.Maximum = 64; trkThreads.Value = 0;
-        trkThreads.Scroll += (s, e) => lblThreads.Text = trkThreads.Value == 0 ? "Threads: Auto" : $"Threads: {trkThreads.Value}"; cy += 36;
-
-        btnScan = MakeSlateButton("▶  Run scan", 0, cy, railW, 34);
-        btnScan.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-        btnScan.Click += BtnScan_Click;
-
-        btnCancelScan = new Button { Text = "Cancel", Location = new Point(0, cy), Size = new Size(railW, 34), BackColor = ClrRed, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9f), Cursor = Cursors.Hand, Visible = false };
-        btnCancelScan.FlatAppearance.BorderSize = 0;
-        btnCancelScan.Click += (s, e) => _cts?.Cancel(); cy += 40;
-
-        progressScan = new ProgressBar { Location = new Point(0, cy), Size = new Size(railW, 8), Style = ProgressBarStyle.Marquee, Visible = false }; cy += 18;
-
-        // --- EXPORT group ---
-        var lblExportHdr = MakeRailHeader("EXPORT", 0, cy + 6); cy += 30;
-        btnExportHtml = new Button { Text = "Save HTML report", Location = new Point(0, cy), Size = new Size(railW, 30), BackColor = ClrGreen, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), Cursor = Cursors.Hand, Enabled = false };
-        btnExportHtml.FlatAppearance.BorderSize = 0;
-        btnExportHtml.Click += BtnExportHtml_Click; cy += 36;
-
-        btnExportCsv = MakeChromeButton("Export CSV", 0, cy, railW, 28);
-        btnExportCsv.Enabled = false;
-        btnExportCsv.Click += BtnExportCsv_Click; cy += 34;
-
-        btnBrokenFilter = new Button { Text = "⚠  Broken only", Location = new Point(0, cy), Size = new Size(railW, 28), BackColor = ClrAmber, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), Cursor = Cursors.Hand, Enabled = false };
-        btnBrokenFilter.FlatAppearance.BorderSize = 0;
-        btnBrokenFilter.Click += BtnBrokenInheritance_Click; cy += 32;
-
-        btnResetFilter = MakeChromeButton("✕ Reset filter", 0, cy, railW, 26);
-        btnResetFilter.Visible = false;
-        btnResetFilter.Click += (s, e) => { if (_lastScanResult != null) PopulateAnalyzeGrid(_lastScanResult); btnResetFilter.Visible = false; }; cy += 34;
-
-        // Output options at the bottom of the rail
-        var lblOutHdr = MakeRailHeader("OUTPUT", 0, cy + 6); cy += 28;
-        lblOutput        = new Label { Text = "Saves to Desktop", Location = new Point(0, cy), Size = new Size(railW, 16), ForeColor = ClrChromeText, Font = new Font("Segoe UI", 8f) }; cy += 20;
-        btnDesktopOutput = MakeChromeButton("Desktop", 0, cy, 88, 26);
-        btnBrowseOutput  = MakeChromeButton("Choose…", 94, cy, railW - 94, 26); cy += 32;
-        chkAutoOpen      = new CheckBox { Text = "Auto-open report", Location = new Point(0, cy), Size = new Size(railW, 22), Checked = true, Font = new Font("Segoe UI", 8.5f), ForeColor = ClrInk };
-        btnBrowseOutput.Click  += BtnBrowseOutput_Click;
-        btnDesktopOutput.Click += BtnDesktopOutput_Click;
-        txtOutputPath = new TextBox { Visible = false };
-        lblScanStatus = new Label { Visible = false };
-
-        pnlAnalyzeOpts.Controls.AddRange([
-            lblScanHdr, txtScanPath, btnBrowseScan,
-            lblDepth, nudDepth, chkExcludeSystem,
-            lblThreads, trkThreads,
-            btnScan, btnCancelScan, progressScan,
-            lblExportHdr, btnExportHtml, btnExportCsv, btnBrokenFilter, btnResetFilter,
-            lblOutHdr, lblOutput, btnDesktopOutput, btnBrowseOutput, chkAutoOpen
-        ]);
-
-        // ================================================================
-        // ANALYZE TAB — Search bar
-        // ================================================================
-        var pnlSearch = new Panel { Dock = DockStyle.Top, Height = 38, BackColor = ClrBody, Padding = new Padding(8, 5, 8, 5) };
-        txtSearch = new TextBox { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10f), PlaceholderText = "Search folders, paths, or identities…" };
-        txtSearch.TextChanged += TxtSearch_TextChanged;
-        pnlSearch.Controls.Add(txtSearch);
-
-        // ================================================================
-        // ANALYZE TAB — SplitContainer: folder grid left, perms right
-        // ================================================================
-        splitResults = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical };
-
-        // --- Folder grid (left panel) ---
-        folderGrid = new DataGridView
-        {
-            Dock                  = DockStyle.Fill,
-            ReadOnly              = true,
-            SelectionMode         = DataGridViewSelectionMode.FullRowSelect,
-            AllowUserToAddRows    = false,
-            AllowUserToDeleteRows = false,
-            RowHeadersVisible     = false,
-            BackgroundColor       = Color.White,
-            BorderStyle           = BorderStyle.None,
-            CellBorderStyle       = DataGridViewCellBorderStyle.SingleHorizontal,
-            GridColor             = Color.FromArgb(230, 234, 240),
-            Font                  = new Font("Segoe UI", 9.5f),
-            RowTemplate           = { Height = 22 },
-            MultiSelect           = false,
-            ShowCellToolTips      = true,
-            ScrollBars            = ScrollBars.Both
-        };
-        folderGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(233, 236, 239);
-        folderGrid.ColumnHeadersDefaultCellStyle.Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-        folderGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(73, 80, 87);
-        folderGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-        folderGrid.ColumnHeadersHeight = 26;
-        folderGrid.DefaultCellStyle.Padding = new Padding(2, 1, 2, 1);
-
-        // Single Folder column — indent + arrow baked into the text
-        folderGrid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            Name = "Folder", HeaderText = "Folder",
-            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 100,
-            DefaultCellStyle = { WrapMode = DataGridViewTriState.False, Padding = new Padding(4, 0, 0, 0) }
-        });
-        folderGrid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            Name = "Perms", HeaderText = "Perms", Width = 52,
-            DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleRight, ForeColor = ClrSlate }
-        });
-        folderGrid.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            Name = "Flags", HeaderText = "", Width = 28, MinimumWidth = 28,
-            Resizable = DataGridViewTriState.False,
-            DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleCenter }
-        });
-
-        folderGrid.CellMouseDown        += FolderGrid_CellMouseDown;
-        folderGrid.SelectionChanged      += FolderGrid_SelectionChanged;
-        folderGrid.CellToolTipTextNeeded += FolderGrid_ToolTip;
-
-        splitResults.Panel1.Controls.Add(folderGrid);
-
-        // --- Perms grid (right panel) ---
-        pnlPermHeader = new Panel { Dock = DockStyle.Top, Height = 28, BackColor = Color.FromArgb(241, 245, 249), Padding = new Padding(8, 4, 0, 0) };
-        lblFolderPath = new Label { Dock = DockStyle.Fill, Text = "Select a folder to view its permissions", ForeColor = ClrInk, Font = new Font("Segoe UI", 8.5f), TextAlign = ContentAlignment.MiddleLeft };
-        pnlPermHeader.Controls.Add(lblFolderPath);
-
-        gridPerms = MakePermGrid();
-        splitResults.Panel2.Controls.Add(gridPerms);
-        splitResults.Panel2.Controls.Add(pnlPermHeader);
-
-        tabAnalyze.Controls.Add(splitResults);
-        tabAnalyze.Controls.Add(pnlSearch);
-        tabAnalyze.Controls.Add(pnlAnalyzeOpts);
-        tabAnalyze.Padding = new Padding(6);
-
-        // ================================================================
-        // COMPARE TAB
-        // ================================================================
-        pnlCompareOpts = new Panel { Dock = DockStyle.Top, Height = 92, BackColor = ClrBody, Padding = new Padding(8, 6, 8, 6) };
-        pnlCompareOpts.Paint += PnlOptions_Paint;
-
-        int cx = 10, lh = 28, cr1y = 6, cr2y = 38;
-
-        lblPath1 = MakeLabel("Path A:", cx, cr1y + 3, 52);
-        txtPath1 = new TextBox { Location = new Point(cx + 56, cr1y), Size = new Size(10, lh), Font = new Font("Segoe UI", 9.5f), PlaceholderText = @"C:\Shares\Client1", Anchor = AnchorStyles.Top | AnchorStyles.Left };
-        btnBrowse1 = MakeChromeButton("Browse", 0, cr1y, 64, lh);
-        btnBrowse1.Click += (s, e) => BrowseFolder(txtPath1);
-        AnchorR(btnBrowse1);
-
-        lblPath2 = MakeLabel("Path B:", 0, cr1y + 3, 52);
-        txtPath2 = new TextBox { Location = new Point(0, cr1y), Size = new Size(10, lh), Font = new Font("Segoe UI", 9.5f), PlaceholderText = @"C:\Shares\Client2", Anchor = AnchorStyles.Top | AnchorStyles.Left };
-        btnBrowse2 = MakeChromeButton("Browse", 0, cr1y, 64, lh);
-        btnBrowse2.Click += (s, e) => BrowseFolder(txtPath2);
-
-        btnCompare = new Button { Text = "▶  Compare", Location = new Point(cx, cr2y), Size = new Size(96, 30), BackColor = ClrSlate, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9f, FontStyle.Bold), Cursor = Cursors.Hand, Anchor = AnchorStyles.Top | AnchorStyles.Left };
-        btnCompare.FlatAppearance.BorderSize = 0;
-        btnCompare.FlatAppearance.MouseOverBackColor = ClrSlateDark;
-        btnCompare.Click += BtnCompare_Click;
-
-        btnCancelCompare = new Button { Text = "Cancel", Location = new Point(cx + 102, cr2y), Size = new Size(62, 30), BackColor = ClrRed, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8.5f), Cursor = Cursors.Hand, Visible = false, Anchor = AnchorStyles.Top | AnchorStyles.Left };
-        btnCancelCompare.FlatAppearance.BorderSize = 0;
-        btnCancelCompare.Click += (s, e) => _cts?.Cancel();
-
-        btnExportCompareHtml = new Button { Text = "Save HTML", Location = new Point(cx + 176, cr2y), Size = new Size(92, 30), BackColor = ClrGreen, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), Cursor = Cursors.Hand, Enabled = false, Anchor = AnchorStyles.Top | AnchorStyles.Left };
-        btnExportCompareHtml.FlatAppearance.BorderSize = 0;
-        btnExportCompareHtml.Click += BtnExportCompareHtml_Click;
-
-        btnExportCompareCsv = MakeChromeButton("CSV", cx + 274, cr2y, 50, 30);
-        btnExportCompareCsv.Enabled = false;
-        btnExportCompareCsv.Click += BtnExportCompareCsv_Click;
-
-        lblDepthC = MakeLabel("Depth:", cx + 338, cr2y + 6, 46);
-        nudDepthC = new NumericUpDown { Location = new Point(cx + 388, cr2y + 1), Size = new Size(50, 26), Minimum = 1, Maximum = 50, Value = 5, Font = new Font("Segoe UI", 9f), Anchor = AnchorStyles.Top | AnchorStyles.Left };
-        chkExcludeSystemC = new CheckBox { Text = "Exclude system folders", Location = new Point(cx + 444, cr2y + 6), Size = new Size(168, 22), Font = new Font("Segoe UI", 8.5f), ForeColor = ClrInk, Anchor = AnchorStyles.Top | AnchorStyles.Left };
-
-        progressCompare  = new ProgressBar { Size = new Size(140, 12), Style = ProgressBarStyle.Marquee, Visible = false, Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
-        lblCompareStatus = new Label { Text = "", Location = new Point(cx, cr2y + 30), Size = new Size(10, 16), ForeColor = Color.FromArgb(75, 85, 99), Font = new Font("Segoe UI", 8f), Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
-
-        pnlCompareOpts.Controls.AddRange([lblPath1, txtPath1, btnBrowse1, lblPath2, txtPath2, btnBrowse2, btnCompare, btnCancelCompare, btnExportCompareHtml, btnExportCompareCsv, lblDepthC, nudDepthC, chkExcludeSystemC, progressCompare, lblCompareStatus]);
-
-        splitCompare = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical };
-
-        pnlLeftHeader = new Panel { Dock = DockStyle.Top, Height = 30, BackColor = Color.FromArgb(227, 242, 253) };
-        lblLeftTitle  = new Label { Dock = DockStyle.Fill, Text = "PATH A", Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Color.FromArgb(21, 101, 192), TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 0, 0, 0) };
-        pnlLeftHeader.Controls.Add(lblLeftTitle);
-
-        splitLeft = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal };
-        treeLeft  = new TreeView { Dock = DockStyle.Fill, HideSelection = false, FullRowSelect = true, ShowLines = true, Font = new Font("Segoe UI", 9f), BackColor = Color.White, BorderStyle = BorderStyle.None };
-        treeLeft.AfterSelect   += TreeLeft_AfterSelect;
-        treeLeft.AfterExpand   += (s, e) => { if (!_compareSyncing && e.Node?.Tag is FolderNode f) { _compareSyncing = true; SyncExpand(treeRight, f.RelativePath, true);  _compareSyncing = false; } };
-        treeLeft.AfterCollapse += (s, e) => { if (!_compareSyncing && e.Node?.Tag is FolderNode f) { _compareSyncing = true; SyncExpand(treeRight, f.RelativePath, false); _compareSyncing = false; } };
-
-        pnlLeftPermHdr = new Panel { Dock = DockStyle.Top, Height = 22, BackColor = Color.FromArgb(241, 245, 249) };
-        lblLeftFolder  = new Label { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 8f), ForeColor = ClrInk, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(6, 0, 0, 0) };
-        pnlLeftPermHdr.Controls.Add(lblLeftFolder);
-        gridLeft = MakePermGrid();
-        splitLeft.Panel1.Controls.Add(treeLeft);
-        splitLeft.Panel2.Controls.Add(gridLeft);
-        splitLeft.Panel2.Controls.Add(pnlLeftPermHdr);
-        splitCompare.Panel1.Controls.Add(splitLeft);
-        splitCompare.Panel1.Controls.Add(pnlLeftHeader);
-
-        pnlRightHeader = new Panel { Dock = DockStyle.Top, Height = 30, BackColor = Color.FromArgb(243, 229, 245) };
-        lblRightTitle  = new Label { Dock = DockStyle.Fill, Text = "PATH B", Font = new Font("Segoe UI", 9f, FontStyle.Bold), ForeColor = Color.FromArgb(106, 27, 154), TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 0, 0, 0) };
-        pnlRightHeader.Controls.Add(lblRightTitle);
-
-        splitRight = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal };
-        treeRight  = new TreeView { Dock = DockStyle.Fill, HideSelection = false, FullRowSelect = true, ShowLines = true, Font = new Font("Segoe UI", 9f), BackColor = Color.White, BorderStyle = BorderStyle.None };
-        treeRight.AfterSelect   += TreeRight_AfterSelect;
-        treeRight.AfterExpand   += (s, e) => { if (!_compareSyncing && e.Node?.Tag is FolderNode f) { _compareSyncing = true; SyncExpand(treeLeft, f.RelativePath, true);  _compareSyncing = false; } };
-        treeRight.AfterCollapse += (s, e) => { if (!_compareSyncing && e.Node?.Tag is FolderNode f) { _compareSyncing = true; SyncExpand(treeLeft, f.RelativePath, false); _compareSyncing = false; } };
-
-        pnlRightPermHdr = new Panel { Dock = DockStyle.Top, Height = 22, BackColor = Color.FromArgb(241, 245, 249) };
-        lblRightFolder  = new Label { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 8f), ForeColor = ClrInk, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(6, 0, 0, 0) };
-        pnlRightPermHdr.Controls.Add(lblRightFolder);
-        gridRight = MakePermGrid();
-        splitRight.Panel1.Controls.Add(treeRight);
-        splitRight.Panel2.Controls.Add(gridRight);
-        splitRight.Panel2.Controls.Add(pnlRightPermHdr);
-        splitCompare.Panel2.Controls.Add(splitRight);
-        splitCompare.Panel2.Controls.Add(pnlRightHeader);
-
-        var pnlLegend = new Panel { Dock = DockStyle.Bottom, Height = 28, BackColor = Color.FromArgb(250, 250, 250) };
-        var lblLegend = new Label { Dock = DockStyle.Fill, Text = "Legend:  🟢 Same   🟠 Permissions differ   🔵 Left path only   🟣 Right path only   🟡 Broken inheritance", Font = new Font("Segoe UI", 8.5f), ForeColor = Color.FromArgb(75, 85, 99), TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(10, 0, 0, 0) };
-        pnlLegend.Controls.Add(lblLegend);
-
-        tabCompare.Controls.Add(splitCompare);
-        tabCompare.Controls.Add(pnlLegend);
-        tabCompare.Controls.Add(pnlCompareOpts);
-        tabCompare.Padding = new Padding(6);
-
-        // ================================================================
-        // ASSEMBLE
-        // ================================================================
-        Controls.Add(tabMain);
+        // Docking is resolved from the highest child index down, so the Fill
+        // control is added first and the outermost band last.
+        Controls.Add(pnlWorkspace);
+        Controls.Add(pnlEventLog);
         Controls.Add(statusStrip1);
-        Controls.Add(pnlHeader);
-        Controls.Add(menuStrip1);
-        MainMenuStrip = menuStrip1;
+        Controls.Add(pnlRibbon);
 
         Shown += MainForm_Shown;
         ResumeLayout(false);
         PerformLayout();
-
-        pnlCompareOpts.SizeChanged += (s, e) => LayoutCompareOptions();
-        LayoutCompareOptions();
     }
 
-    // -----------------------------------------------------------------------
-    // Layout helpers
-    // -----------------------------------------------------------------------
-
-    private void LayoutCompareOptions()
+    // =======================================================================
+    // RIBBON
+    // =======================================================================
+    private void BuildRibbon()
     {
-        int w = pnlCompareOpts.ClientSize.Width - 16, lx = 10, mid = w / 2;
-        txtPath1.Location   = new Point(lx + 56, 6);
-        txtPath1.Width      = mid - 66 - (lx + 56);
-        btnBrowse1.Location = new Point(mid - 64, 6);
-        lblPath2.Location   = new Point(mid + 4, 9);
-        txtPath2.Location   = new Point(mid + 60, 6);
-        txtPath2.Width      = w - 64 - (mid + 60);
-        btnBrowse2.Location = new Point(w - 62, 6);
-        progressCompare.Location = new Point(w - 144, 46);
-        progressCompare.Width    = 140;
+        pnlRibbon = new Panel { Dock = DockStyle.Top, Height = TabStripH + RibbonBodyH, BackColor = ClrBody };
+
+        pnlRibbonTabs = new Panel { Dock = DockStyle.Top, Height = TabStripH, BackColor = ClrSlate };
+        pnlRibbonTabs.Paint     += RibbonTabs_Paint;
+        pnlRibbonTabs.MouseDown += RibbonTabs_MouseDown;
+        pnlRibbonTabs.MouseMove += (s, e) => pnlRibbonTabs.Cursor =
+            _aboutRect.Contains(e.Location) || _ribbonTabRects.Any(r => r.Contains(e.Location))
+                ? Cursors.Hand : Cursors.Default;
+
+        pnlRibbonBody = new Panel { Dock = DockStyle.Fill, BackColor = ClrBody };
+        pnlRibbonBody.Paint += (s, e) =>
+        {
+            using var pen = new Pen(ClrRule, 1);
+            e.Graphics.DrawLine(pen, 0, pnlRibbonBody.Height - 1, pnlRibbonBody.Width, pnlRibbonBody.Height - 1);
+        };
+
+        flpAnalyzeRib = MakeRibbonStrip();
+        flpCompareRib = MakeRibbonStrip();
+        flpExportRib  = MakeRibbonStrip();
+
+        BuildAnalyzeRibbon();
+        BuildCompareRibbon();
+        BuildExportRibbon();
+
+        pnlRibbonBody.Controls.Add(flpAnalyzeRib);
+        pnlRibbonBody.Controls.Add(flpCompareRib);
+        pnlRibbonBody.Controls.Add(flpExportRib);
+
+        pnlRibbon.Controls.Add(pnlRibbonBody);
+        pnlRibbon.Controls.Add(pnlRibbonTabs);
+    }
+
+    private static FlowLayoutPanel MakeRibbonStrip() => new()
+    {
+        Dock          = DockStyle.Fill,
+        FlowDirection = FlowDirection.LeftToRight,
+        WrapContents  = false,
+        AutoScroll    = true,
+        BackColor     = ClrBody,
+        Padding       = new Padding(6, 0, 0, 0),
+        Visible       = false
+    };
+
+    private void BuildAnalyzeRibbon()
+    {
+        var gScan = new RibbonGroup("Scan", 268);
+        txtScanPath = new TextBox { Location = new Point(10, 12), Size = new Size(246, 24), Font = FntBody, PlaceholderText = @"C:\Share or \\server\share" };
+        btnBrowseScan = MakeChromeButton("Browse folder…", 10, 42, 130, 26);
+        btnBrowseScan.Click += BtnBrowseScan_Click;
+        gScan.Controls.AddRange([txtScanPath, btnBrowseScan]);
+
+        var gRun = new RibbonGroup("Run", 106);
+        btnScan = MakeSlateButton("▶\nRun scan", 12, 8, 82, 46);
+        btnScan.Font = FntBodyB;
+        btnScan.Click += BtnScan_Click;
+        btnCancelScan = MakeDangerButton("Cancel", 12, 8, 82, 46);
+        btnCancelScan.Visible = false;
+        btnCancelScan.Click += (s, e) => _cts?.Cancel();
+        progressScan = new ProgressBar { Location = new Point(12, 58), Size = new Size(82, 6), Style = ProgressBarStyle.Marquee, Visible = false };
+        gRun.Controls.AddRange([btnScan, btnCancelScan, progressScan]);
+
+        var gOpts = new RibbonGroup("Options", 236);
+        nudDepth = new NumericUpDown { Location = new Point(52, 10), Size = new Size(52, 24), Minimum = 1, Maximum = 50, Value = 5, Font = FntBody };
+        chkExcludeSystem = new CheckBox { Text = "System folders", Location = new Point(112, 12), Size = new Size(116, 20), Font = FntSmall, ForeColor = ClrInk };
+        lblThreads = new Label { Text = "Threads: Auto", Location = new Point(10, 42), Size = new Size(92, 18), Font = FntSmall, ForeColor = ClrMuted };
+        trkThreads = new TrackBar { Location = new Point(102, 38), Size = new Size(126, 26), Minimum = 0, Maximum = 64, Value = 0, TickStyle = TickStyle.None, AutoSize = false };
+        trkThreads.Scroll += (s, e) => lblThreads.Text = trkThreads.Value == 0 ? "Threads: Auto" : $"Threads: {trkThreads.Value}";
+        gOpts.Controls.AddRange([MakeLabel("Depth", 10, 13, 40), nudDepth, chkExcludeSystem, lblThreads, trkThreads]);
+
+        var gFilter = new RibbonGroup("Filter", 176);
+        btnBrokenFilter = MakeAmberButton("⚠  Broken only", 10, 10, 156, 26);
+        btnBrokenFilter.Enabled = false;
+        btnBrokenFilter.Click += BtnBrokenInheritance_Click;
+        btnResetFilter = MakeChromeButton("✕  Reset filter", 10, 40, 156, 24);
+        btnResetFilter.Visible = false;
+        btnResetFilter.Click += (s, e) =>
+        {
+            if (_lastScanResult != null) PopulateAnalyzeGrid(_lastScanResult);
+            btnResetFilter.Visible = false;
+        };
+        gFilter.Controls.AddRange([btnBrokenFilter, btnResetFilter]);
+
+        flpAnalyzeRib.Controls.AddRange([gScan, gRun, gOpts, gFilter]);
+    }
+
+    private void BuildCompareRibbon()
+    {
+        var gPaths = new RibbonGroup("Paths", 336);
+        txtPath1 = new TextBox { Location = new Point(30, 10), Size = new Size(220, 24), Font = FntBody, PlaceholderText = @"C:\Shares\Client1" };
+        btnBrowse1 = MakeChromeButton("Browse", 256, 10, 68, 24);
+        btnBrowse1.Click += (s, e) => BrowseFolder(txtPath1);
+        txtPath2 = new TextBox { Location = new Point(30, 40), Size = new Size(220, 24), Font = FntBody, PlaceholderText = @"C:\Shares\Client2" };
+        btnBrowse2 = MakeChromeButton("Browse", 256, 40, 68, 24);
+        btnBrowse2.Click += (s, e) => BrowseFolder(txtPath2);
+        gPaths.Controls.AddRange([
+            MakeLabel("A", 10, 13, 18), txtPath1, btnBrowse1,
+            MakeLabel("B", 10, 43, 18), txtPath2, btnBrowse2]);
+
+        var gRun = new RibbonGroup("Run", 106);
+        btnCompare = MakeSlateButton("▶\nCompare", 12, 8, 82, 46);
+        btnCompare.Font = FntBodyB;
+        btnCompare.Click += BtnCompare_Click;
+        btnCancelCompare = MakeDangerButton("Cancel", 12, 8, 82, 46);
+        btnCancelCompare.Visible = false;
+        btnCancelCompare.Click += (s, e) => _cts?.Cancel();
+        progressCompare = new ProgressBar { Location = new Point(12, 58), Size = new Size(82, 6), Style = ProgressBarStyle.Marquee, Visible = false };
+        gRun.Controls.AddRange([btnCompare, btnCancelCompare, progressCompare]);
+
+        var gOpts = new RibbonGroup("Options", 236);
+        nudDepthC = new NumericUpDown { Location = new Point(52, 10), Size = new Size(52, 24), Minimum = 1, Maximum = 50, Value = 5, Font = FntBody };
+        chkExcludeSystemC = new CheckBox { Text = "System folders", Location = new Point(112, 12), Size = new Size(116, 20), Font = FntSmall, ForeColor = ClrInk };
+        gOpts.Controls.AddRange([MakeLabel("Depth", 10, 13, 40), nudDepthC, chkExcludeSystemC]);
+
+        var gFilter = new RibbonGroup("Filter", 176);
+        btnChangesOnly = MakeAmberButton("⚠  Changes only", 10, 10, 156, 26);
+        btnChangesOnly.Enabled = false;
+        btnChangesOnly.Click += BtnChangesOnly_Click;
+        btnResetCompare = MakeChromeButton("✕  Reset filter", 10, 40, 156, 24);
+        btnResetCompare.Visible = false;
+        btnResetCompare.Click += BtnResetCompareFilter_Click;
+        gFilter.Controls.AddRange([btnChangesOnly, btnResetCompare]);
+
+        flpCompareRib.Controls.AddRange([gPaths, gRun, gOpts, gFilter]);
+    }
+
+    private void BuildExportRibbon()
+    {
+        var gReport = new RibbonGroup("Report", 210);
+        btnExportHtml = MakeGreenButton("Save HTML report", 10, 10, 186, 26);
+        btnExportHtml.Enabled = false;
+        btnExportHtml.Click += BtnExportHtml_Click;
+        btnExportCsv = MakeChromeButton("Export CSV", 10, 40, 186, 24);
+        btnExportCsv.Enabled = false;
+        btnExportCsv.Click += BtnExportCsv_Click;
+        gReport.Controls.AddRange([btnExportHtml, btnExportCsv]);
+
+        var gOutput = new RibbonGroup("Output", 216);
+        btnDesktopOutput = MakeChromeButton("Desktop", 10, 10, 88, 24);
+        btnDesktopOutput.Click += BtnDesktopOutput_Click;
+        btnBrowseOutput = MakeChromeButton("Choose…", 104, 10, 92, 24);
+        btnBrowseOutput.Click += BtnBrowseOutput_Click;
+        chkAutoOpen = new CheckBox { Text = "Auto-open report", Location = new Point(10, 40), Size = new Size(186, 20), Checked = true, Font = FntSmall, ForeColor = ClrInk };
+        gOutput.Controls.AddRange([btnDesktopOutput, btnBrowseOutput, chkAutoOpen]);
+
+        var gOpen = new RibbonGroup("Open", 196);
+        btnOpenReport = MakeChromeButton("Open HTML report…", 10, 10, 176, 26);
+        btnOpenReport.Click += MnuOpenReport_Click;
+        lblExportTarget = new Label { Location = new Point(10, 42), Size = new Size(176, 18), Font = FntSmall, ForeColor = ClrMuted };
+        gOpen.Controls.AddRange([btnOpenReport, lblExportTarget]);
+
+        // Not shown — holds the resolved output path for ResolveOutputPath().
+        txtOutputPath = new TextBox { Visible = false };
+        gOpen.Controls.Add(txtOutputPath);
+
+        flpExportRib.Controls.AddRange([gReport, gOutput, gOpen]);
     }
 
     // -----------------------------------------------------------------------
-    // Paint
+    // Ribbon tab strip — painted and hit-tested by hand
     // -----------------------------------------------------------------------
-    private void PnlBrandHeader_Paint(object? sender, PaintEventArgs e)
+    private void RibbonTabs_Paint(object? sender, PaintEventArgs e)
     {
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        _ribbonTabRects.Clear();
 
-        // Logo tile — light rounded square with a folder glyph
-        var rect = new Rectangle(12, 11, 30, 30);
-        using (var path = RoundedRect(rect, 7))
-        using (var fill = new SolidBrush(Color.FromArgb(248, 250, 252)))
-            g.FillPath(fill, path);
+        int x = 10;
+        for (int i = 0; i < RibbonTabNames.Length; i++)
+        {
+            string name = RibbonTabNames[i];
+            int    w    = TextRenderer.MeasureText(name, FntTab).Width + 30;
+            var    rect = new Rectangle(x, 0, w, TabStripH);
+            _ribbonTabRects.Add(rect);
 
-        using var glyphFont = new Font("Segoe UI Symbol", 13f);
-        var glyph = "\uD83D\uDCC1"; // folder
-        var sz = g.MeasureString(glyph, glyphFont);
-        g.DrawString(glyph, glyphFont, new SolidBrush(ClrSlate),
-            rect.Left + (rect.Width - sz.Width) / 2f,
-            rect.Top + (rect.Height - sz.Height) / 2f);
+            bool active = i == _activeRibbonTab;
+            if (active)
+            {
+                using var bg = new SolidBrush(ClrBody);
+                g.FillRectangle(bg, rect);
+            }
+            TextRenderer.DrawText(g, name, FntTab, rect,
+                active ? ClrSlate : ClrSlateText,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            x += w;
+        }
 
-        // Hairline under the band
-        using var pen = new Pen(ClrSlateDark, 1);
-        g.DrawLine(pen, 0, pnlHeader.Height - 1, pnlHeader.Width, pnlHeader.Height - 1);
+        _aboutRect = new Rectangle(pnlRibbonTabs.Width - 38, 0, 30, TabStripH);
+        TextRenderer.DrawText(g, "?", FntTab, _aboutRect, ClrSlateText,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 
-    private static GraphicsPath RoundedRect(Rectangle r, int radius)
+    private void RibbonTabs_MouseDown(object? sender, MouseEventArgs e)
     {
-        var path = new GraphicsPath();
-        int d = radius * 2;
-        path.AddArc(r.X, r.Y, d, d, 180, 90);
-        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
-        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
-        path.CloseFigure();
-        return path;
+        if (_aboutRect.Contains(e.Location)) { MnuAbout_Click(null, EventArgs.Empty); return; }
+        for (int i = 0; i < _ribbonTabRects.Count; i++)
+            if (_ribbonTabRects[i].Contains(e.Location)) { SelectRibbonTab(i); return; }
     }
 
-    private static void PnlOptions_Paint(object? sender, PaintEventArgs e)
+    /// <summary>
+    /// Analyze and Compare switch the workspace as well as the command groups.
+    /// Export only swaps the groups — it acts on whichever mode you came from.
+    /// </summary>
+    private void SelectRibbonTab(int index)
     {
-        if (sender is not Panel p) return;
-        e.Graphics.DrawLine(new Pen(Color.FromArgb(226, 232, 240), 1), 0, p.Height - 1, p.Width, p.Height - 1);
+        _activeRibbonTab      = index;
+        flpAnalyzeRib.Visible = index == 0;
+        flpCompareRib.Visible = index == 1;
+        flpExportRib.Visible  = index == 2;
+
+        if (index is 0 or 1)
+        {
+            _mode = index;
+            pnlAnalyzeWork.Visible = index == 0;
+            pnlCompareWork.Visible = index == 1;
+            if (index == 1) LayoutCompareSplitters();
+        }
+
+        UpdateExportState();
+        pnlRibbonTabs.Invalidate();
     }
 
-    // Left rail — right-edge divider
-    private void PnlRail_Paint(object? sender, PaintEventArgs e)
+    private void UpdateExportState()
     {
-        if (sender is not Panel p) return;
-        using var pen = new Pen(Color.FromArgb(226, 232, 240), 1);
-        e.Graphics.DrawLine(pen, p.Width - 1, 0, p.Width - 1, p.Height);
+        bool ready = _mode == 0 ? _lastScanResult != null : _lastCompareResult != null;
+        btnExportHtml.Enabled = ready;
+        btnExportCsv.Enabled  = ready;
+        lblExportTarget.Text  = _mode == 0
+            ? (ready ? "Acts on the current scan" : "Run a scan first")
+            : (ready ? "Acts on the current comparison" : "Run a comparison first");
     }
 
-    // Small uppercase group header for the rail
-    private static Label MakeRailHeader(string text, int x, int y) =>
-        new() { Text = text, Location = new Point(x, y), AutoSize = true, Font = new Font("Segoe UI", 8f, FontStyle.Bold), ForeColor = ClrChromeText };
+    // =======================================================================
+    // ANALYZE WORKSPACE
+    // =======================================================================
+    private void BuildAnalyzeWorkspace()
+    {
+        pnlAnalyzeWork = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+
+        var pnlSearch = new Panel { Dock = DockStyle.Top, Height = 36, BackColor = ClrBody, Padding = new Padding(8, 5, 8, 5) };
+        txtSearch = new TextBox { Dock = DockStyle.Fill, Font = FntBody, PlaceholderText = "Search folders, paths, or identities…" };
+        txtSearch.TextChanged += TxtSearch_TextChanged;
+        pnlSearch.Controls.Add(txtSearch);
+
+        splitResults = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical };
+
+        folderGrid = MakeFolderGrid();
+        folderGrid.CellMouseDown         += FolderGrid_CellMouseDown;
+        folderGrid.SelectionChanged      += FolderGrid_SelectionChanged;
+        folderGrid.CellToolTipTextNeeded += FolderGrid_ToolTip;
+        splitResults.Panel1.Controls.Add(folderGrid);
+
+        // Folder details block, then the section header, then the grid.
+        pnlDetails = new Panel { Dock = DockStyle.Top, Height = 66, BackColor = ClrHdrBg };
+        pnlDetails.Paint += (s, e) =>
+        {
+            using var pen = new Pen(ClrRule, 1);
+            e.Graphics.DrawLine(pen, 0, pnlDetails.Height - 1, pnlDetails.Width, pnlDetails.Height - 1);
+        };
+        lblDetPath    = MakeDetailValue(66, 6,  520);
+        lblDetOwner   = MakeDetailValue(66, 24, 240);
+        lblDetMod     = MakeDetailValue(390, 24, 190);
+        lblDetInherit = MakeDetailValue(66, 42, 520);
+        pnlDetails.Controls.AddRange([
+            MakeDetailKey("Path",     10, 6),
+            MakeDetailKey("Owner",    10, 24),
+            MakeDetailKey("Modified", 330, 24),
+            MakeDetailKey("Inherit",  10, 42),
+            lblDetPath, lblDetOwner, lblDetMod, lblDetInherit]);
+
+        var pnlPermHdr = new Panel { Dock = DockStyle.Top, Height = 24, BackColor = ClrHdrBg };
+        lblFolderPath = new Label { Dock = DockStyle.Fill, Text = "Permissions", ForeColor = ClrInk, Font = FntSmall, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 0, 0, 0) };
+        pnlPermHdr.Controls.Add(lblFolderPath);
+
+        gridPerms = MakePermGrid();
+        splitResults.Panel2.Controls.Add(gridPerms);
+        splitResults.Panel2.Controls.Add(pnlPermHdr);
+        splitResults.Panel2.Controls.Add(pnlDetails);
+
+        lblScanStatus = new Label { Visible = false };
+
+        pnlAnalyzeWork.Controls.Add(splitResults);
+        pnlAnalyzeWork.Controls.Add(pnlSearch);
+    }
+
+    private static Label MakeDetailKey(string text, int x, int y) => new()
+    {
+        Text = text, Location = new Point(x, y), Size = new Size(56, 17),
+        Font = FntSmall, ForeColor = ClrMuted, TextAlign = ContentAlignment.MiddleLeft
+    };
+
+    private static Label MakeDetailValue(int x, int y, int w) => new()
+    {
+        Text = "—", Location = new Point(x, y), Size = new Size(w, 17),
+        Font = FntSmall, ForeColor = ClrInk, TextAlign = ContentAlignment.MiddleLeft,
+        AutoEllipsis = true
+    };
+
+    /// <summary>Fills the detail block for the folder selected in the grid.</summary>
+    private void ShowFolderDetails(FolderNode? f)
+    {
+        if (f == null)
+        {
+            lblDetPath.Text = lblDetOwner.Text = lblDetMod.Text = lblDetInherit.Text = "—";
+            return;
+        }
+        lblDetPath.Text  = f.Path;
+        lblDetOwner.Text = string.IsNullOrEmpty(f.Owner) ? "—" : f.Owner;
+        lblDetMod.Text   = f.Modified?.ToString("yyyy-MM-dd HH:mm") ?? "—";
+
+        if (f.AccessDenied)
+        {
+            lblDetInherit.Text      = "Access denied — ACL could not be read";
+            lblDetInherit.ForeColor = ClrRed;
+        }
+        else if (f.InheritanceBroken)
+        {
+            lblDetInherit.Text      = $"BROKEN — {f.Permissions.Count} explicit entries, not inherited from parent";
+            lblDetInherit.ForeColor = ClrAmber;
+        }
+        else
+        {
+            lblDetInherit.Text      = $"Inherits from parent — {f.Permissions.Count} entries";
+            lblDetInherit.ForeColor = ClrInk;
+        }
+    }
+
+    // =======================================================================
+    // COMPARE WORKSPACE
+    // =======================================================================
+    private void BuildCompareWorkspace()
+    {
+        pnlCompareWork = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Visible = false };
+
+        splitCompare = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Vertical };
+
+        (splitLeft,  treeLeft,  gridLeft,  lblLeftTitle,  lblLeftFolder)  = BuildComparePane("PATH A");
+        (splitRight, treeRight, gridRight, lblRightTitle, lblRightFolder) = BuildComparePane("PATH B");
+
+        treeLeft.AfterSelect   += TreeLeft_AfterSelect;
+        treeLeft.AfterExpand   += (s, e) => { if (!_compareSyncing && e.Node?.Tag is FolderNode f) { _compareSyncing = true; SyncExpand(treeRight, f.RelativePath, true);  _compareSyncing = false; } };
+        treeLeft.AfterCollapse += (s, e) => { if (!_compareSyncing && e.Node?.Tag is FolderNode f) { _compareSyncing = true; SyncExpand(treeRight, f.RelativePath, false); _compareSyncing = false; } };
+        treeRight.AfterSelect   += TreeRight_AfterSelect;
+        treeRight.AfterExpand   += (s, e) => { if (!_compareSyncing && e.Node?.Tag is FolderNode f) { _compareSyncing = true; SyncExpand(treeLeft, f.RelativePath, true);  _compareSyncing = false; } };
+        treeRight.AfterCollapse += (s, e) => { if (!_compareSyncing && e.Node?.Tag is FolderNode f) { _compareSyncing = true; SyncExpand(treeLeft, f.RelativePath, false); _compareSyncing = false; } };
+
+        splitCompare.Panel1.Controls.Add(splitLeft.Parent!);
+        splitCompare.Panel2.Controls.Add(splitRight.Parent!);
+
+        var pnlLegend = new Panel { Dock = DockStyle.Bottom, Height = 26, BackColor = ClrBody };
+        lblCompareStatus = new Label { Dock = DockStyle.Fill, Text = "Legend:  ● Same   ● Permissions differ   ● One side only   ⚠ Broken inheritance", Font = FntSmall, ForeColor = ClrMuted, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(10, 0, 0, 0) };
+        pnlLegend.Controls.Add(lblCompareStatus);
+
+        pnlCompareWork.Controls.Add(splitCompare);
+        pnlCompareWork.Controls.Add(pnlLegend);
+    }
+
+    private static (SplitContainer, TreeView, DataGridView, Label, Label) BuildComparePane(string title)
+    {
+        var host = new Panel { Dock = DockStyle.Fill };
+
+        var hdr = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = ClrHdrBg };
+        var lblTitle = new Label { Dock = DockStyle.Fill, Text = title, Font = FntBodyB, ForeColor = ClrSlate, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 0, 0, 0) };
+        hdr.Controls.Add(lblTitle);
+
+        var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal };
+        var tree  = new TreeView { Dock = DockStyle.Fill, HideSelection = false, FullRowSelect = true, ShowLines = true, Font = FntBody, BackColor = Color.White, BorderStyle = BorderStyle.None };
+
+        var permHdr   = new Panel { Dock = DockStyle.Top, Height = 22, BackColor = ClrHdrBg };
+        var lblFolder = new Label { Dock = DockStyle.Fill, Font = FntSmall, ForeColor = ClrInk, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(6, 0, 0, 0), AutoEllipsis = true };
+        permHdr.Controls.Add(lblFolder);
+
+        var grid = MakePermGrid();
+        split.Panel1.Controls.Add(tree);
+        split.Panel2.Controls.Add(grid);
+        split.Panel2.Controls.Add(permHdr);
+
+        host.Controls.Add(split);
+        host.Controls.Add(hdr);
+        return (split, tree, grid, lblTitle, lblFolder);
+    }
+
+    // -----------------------------------------------------------------------
+    // Compare filter — show only folders whose permissions actually differ
+    // -----------------------------------------------------------------------
+    private void BtnChangesOnly_Click(object? sender, EventArgs e)
+    {
+        if (_lastCompareResult == null || _lastLeftResult == null || _lastRightResult == null) return;
+        PopulateCompareTree(treeLeft,  _lastLeftResult,  _lastCompareResult, isLeft: true,  changedOnly: true);
+        PopulateCompareTree(treeRight, _lastRightResult, _lastCompareResult, isLeft: false, changedOnly: true);
+        btnResetCompare.Visible = true;
+        statusMain.Text = $"Showing {_lastCompareResult.ChangedCount + _lastCompareResult.LeftOnlyCount + _lastCompareResult.RightOnlyCount} differing folders — click ✕ Reset to restore";
+    }
+
+    private void BtnResetCompareFilter_Click(object? sender, EventArgs e)
+    {
+        if (_lastCompareResult == null || _lastLeftResult == null || _lastRightResult == null) return;
+        PopulateCompareTree(treeLeft,  _lastLeftResult,  _lastCompareResult, isLeft: true);
+        PopulateCompareTree(treeRight, _lastRightResult, _lastCompareResult, isLeft: false);
+        btnResetCompare.Visible = false;
+        statusMain.Text = "Filter cleared";
+    }
+
+    // =======================================================================
+    // EVENT LOG
+    // =======================================================================
+    private void BuildEventLog()
+    {
+        pnlEventLog = new Panel { Dock = DockStyle.Bottom, Height = EventBarH, BackColor = ClrBody };
+
+        pnlEventHdr = new Panel { Dock = DockStyle.Top, Height = EventBarH, BackColor = ClrBody };
+        pnlEventHdr.Paint += (s, e) =>
+        {
+            using var pen = new Pen(ClrRule, 1);
+            e.Graphics.DrawLine(pen, 0, 0, pnlEventHdr.Width, 0);
+        };
+        lblEventSum = new Label { Dock = DockStyle.Fill, Text = "EVENT LOG — no scan yet", Font = FntSmall, ForeColor = ClrMuted, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(10, 0, 0, 0) };
+        btnEventToggle = new Button { Dock = DockStyle.Right, Width = 34, Text = "▲", FlatStyle = FlatStyle.Flat, Font = FntSmall, ForeColor = ClrMuted, BackColor = ClrBody, Cursor = Cursors.Hand };
+        btnEventToggle.FlatAppearance.BorderSize = 0;
+        btnEventToggle.Click += (s, e) => ToggleEventLog();
+        lblEventSum.Click += (s, e) => ToggleEventLog();
+        pnlEventHdr.Controls.Add(lblEventSum);
+        pnlEventHdr.Controls.Add(btnEventToggle);
+
+        lstEvents = new ListBox
+        {
+            Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, Font = FntSmall,
+            BackColor = Color.White, ForeColor = ClrInk, IntegralHeight = false,
+            DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 18
+        };
+        lstEvents.DrawItem += LstEvents_DrawItem;
+
+        pnlEventLog.Controls.Add(lstEvents);
+        pnlEventLog.Controls.Add(pnlEventHdr);
+    }
+
+    private void ToggleEventLog()
+    {
+        _eventLogExpanded  = !_eventLogExpanded;
+        pnlEventLog.Height = _eventLogExpanded ? EventBarH + 140 : EventBarH;
+        btnEventToggle.Text = _eventLogExpanded ? "▼" : "▲";
+    }
+
+    private void LstEvents_DrawItem(object? sender, DrawItemEventArgs e)
+    {
+        if (e.Index < 0) return;
+        e.DrawBackground();
+        string text  = lstEvents.Items[e.Index]?.ToString() ?? "";
+        Color  color = text.StartsWith("ERROR") ? ClrRed
+                     : text.StartsWith("WARN")  ? ClrAmber
+                     : ClrInk;
+        if ((e.State & DrawItemState.Selected) == DrawItemState.Selected) color = Color.White;
+        TextRenderer.DrawText(e.Graphics, text, FntSmall,
+            new Rectangle(e.Bounds.X + 8, e.Bounds.Y, e.Bounds.Width - 8, e.Bounds.Height),
+            color, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        e.DrawFocusRectangle();
+    }
+
+    /// <summary>
+    /// Turns the per-folder AccessDenied flags the scan already collects into a
+    /// readable list. Previously these were only ever surfaced as a count.
+    /// </summary>
+    private void PopulateEventLog(ScanResult result)
+    {
+        lstEvents.BeginUpdate();
+        lstEvents.Items.Clear();
+
+        var denied = result.AllFolders.Where(f => f.AccessDenied).ToList();
+        foreach (var f in denied)
+            lstEvents.Items.Add($"WARN   Access denied — ACL unreadable:  {f.Path}");
+
+        int broken = result.BrokenInheritanceCount;
+        if (broken > 0)
+            lstEvents.Items.Add($"INFO   {broken} folder(s) have inheritance disabled — see the Broken only filter");
+
+        if (lstEvents.Items.Count == 0)
+            lstEvents.Items.Add("INFO   Scan completed with no warnings");
+
+        lstEvents.EndUpdate();
+
+        int warn = denied.Count;
+        lblEventSum.Text = warn > 0
+            ? $"⚠  EVENT LOG — {lstEvents.Items.Count} total ({warn} warning{(warn == 1 ? "" : "s")}, 0 errors)"
+            : $"EVENT LOG — {lstEvents.Items.Count} total (0 warnings, 0 errors)";
+        lblEventSum.ForeColor = warn > 0 ? ClrAmber : ClrMuted;
+    }
 
     // -----------------------------------------------------------------------
     // Startup
     // -----------------------------------------------------------------------
-    private void MainForm_Shown(object? sender, EventArgs e)
+    private void MainForm_Shown(object? sender, EventArgs e) => LayoutAnalyzeSplitters();
+
+    /// <summary>
+    /// A SplitContainer throws if a minimum size won't fit inside its current
+    /// extent — which is exactly the case for a workspace that hasn't been shown
+    /// yet and is still at its default size. Configure only when it will fit.
+    /// </summary>
+    private static void SafeSplit(SplitContainer sc, int min1, int min2, int percent, bool horizontal = false)
     {
-        splitResults.Panel1MinSize = 200; splitResults.Panel2MinSize = 300;
-        splitCompare.Panel1MinSize = 200; splitCompare.Panel2MinSize = 200;
-        splitLeft.Panel1MinSize    = 100; splitLeft.Panel2MinSize    = 80;
-        splitRight.Panel1MinSize   = 100; splitRight.Panel2MinSize   = 80;
-        try { splitResults.SplitterDistance = splitResults.Width  * 40 / 100; } catch { }
-        try { splitCompare.SplitterDistance = splitCompare.Width  * 50 / 100; } catch { }
-        try { splitLeft.SplitterDistance    = splitLeft.Height    * 65 / 100; } catch { }
-        try { splitRight.SplitterDistance   = splitRight.Height   * 65 / 100; } catch { }
+        try
+        {
+            int extent = horizontal ? sc.Height : sc.Width;
+            if (extent < min1 + min2 + sc.SplitterWidth + 8) return;
+
+            sc.Panel1MinSize    = min1;
+            sc.Panel2MinSize    = min2;
+            sc.SplitterDistance = Math.Clamp(extent * percent / 100, min1, extent - min2 - sc.SplitterWidth);
+        }
+        catch { }
+    }
+
+    private void LayoutAnalyzeSplitters() => SafeSplit(splitResults, 220, 360, 38);
+
+    private void LayoutCompareSplitters()
+    {
+        if (_compareLaidOut || splitCompare.Width < 420) return;
+        SafeSplit(splitCompare, 200, 200, 50);
+        SafeSplit(splitLeft,  110, 90, 62, horizontal: true);
+        SafeSplit(splitRight, 110, 90, 62, horizontal: true);
+        _compareLaidOut = true;
     }
 
     // -----------------------------------------------------------------------
@@ -593,7 +784,8 @@ public sealed partial class MainForm : Form
         _folderRows.Clear();
         folderGrid.RowCount = 0;
         gridPerms.Rows.Clear();
-        lblFolderPath.Text = "Select a folder to view its permissions";
+        lblFolderPath.Text = "Permissions";
+        ShowFolderDetails(null);
         _lastScanResult = null;
 
         _cts = new CancellationTokenSource();
@@ -608,12 +800,12 @@ public sealed partial class MainForm : Form
             var r = _lastScanResult;
             progressScan.Visible = false;
             statusMain.Text      = $"Complete — {r.TotalFolders:N0} folders, {r.TotalPermissions:N0} perms, {r.Elapsed.TotalSeconds:F1}s";
-            btnExportHtml.Enabled   = true;
-            btnExportCsv.Enabled    = true;
+            PopulateEventLog(r);
+            UpdateExportState();
             btnBrokenFilter.Enabled = r.BrokenInheritanceCount > 0;
             btnBrokenFilter.Text    = r.BrokenInheritanceCount > 0
-                ? $"⚠ Broken Inheritance ({r.BrokenInheritanceCount})"
-                : "⚠ Broken Inheritance";
+                ? $"⚠  Broken only  ·  {r.BrokenInheritanceCount}"
+                : "⚠  Broken only";
         }
         catch (OperationCanceledException) { progressScan.Visible = false; statusMain.Text = "Scan cancelled"; }
         catch (Exception ex)               { MessageBox.Show($"Scan error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
@@ -626,9 +818,9 @@ public sealed partial class MainForm : Form
         btnCancelScan.Visible = scanning;
         progressScan.Visible  = scanning;
         progressScan.Style    = ProgressBarStyle.Marquee;
-        btnExportHtml.Enabled = !scanning && _lastScanResult != null;
-        btnExportCsv.Enabled  = !scanning && _lastScanResult != null;
         trkThreads.Enabled    = !scanning;
+        if (scanning) { btnExportHtml.Enabled = false; btnExportCsv.Enabled = false; }
+        else UpdateExportState();
         Cursor                = scanning ? Cursors.WaitCursor : Cursors.Default;
     }
 
@@ -640,7 +832,8 @@ public sealed partial class MainForm : Form
         _folderRows.Clear();
         _selectedRow = null;
         gridPerms.Rows.Clear();
-        lblFolderPath.Text = "Select a folder to view its permissions";
+        lblFolderPath.Text = "Permissions";
+        ShowFolderDetails(null);
 
         if (result.Root != null)
             BuildRows(result.Root, visibleParent: true);
@@ -763,7 +956,8 @@ public sealed partial class MainForm : Form
         if (folderGrid.SelectedRows[0].Tag is not FolderRow fr) return;
         if (fr == _selectedRow) return;
         _selectedRow = fr;
-        lblFolderPath.Text = fr.Folder.Path + (fr.Folder.InheritanceBroken ? "  ⚠ INHERITANCE BROKEN" : "");
+        lblFolderPath.Text = "Permissions";
+        ShowFolderDetails(fr.Folder);
         PopulatePermGrid(gridPerms, fr.Folder);
     }
 
@@ -845,7 +1039,7 @@ public sealed partial class MainForm : Form
         finally
         {
             btnBrokenFilter.Enabled = true;
-            btnBrokenFilter.Text    = $"⚠ Broken Inheritance ({_lastScanResult.BrokenInheritanceCount})";
+            btnBrokenFilter.Text    = $"⚠  Broken only  ·  {_lastScanResult.BrokenInheritanceCount}";
         }
     }
 
@@ -879,15 +1073,15 @@ public sealed partial class MainForm : Form
             lblCompareStatus.Text = "Comparing…";
             _lastCompareResult    = _compareService.Compare(_lastLeftResult, _lastRightResult);
 
-            lblLeftTitle.Text  = $"PATH A: {path1}";
-            lblRightTitle.Text = $"PATH B: {path2}";
+            lblLeftTitle.Text  = $"PATH A  ·  {path1}";
+            lblRightTitle.Text = $"PATH B  ·  {path2}";
             PopulateCompareTree(treeLeft,  _lastLeftResult,  _lastCompareResult, isLeft: true);
             PopulateCompareTree(treeRight, _lastRightResult, _lastCompareResult, isLeft: false);
 
             var c = _lastCompareResult;
             lblCompareStatus.Text        = $"Done — Same: {c.SameCount:N0}  Changed: {c.ChangedCount}  Left-only: {c.LeftOnlyCount}  Right-only: {c.RightOnlyCount}";
-            btnExportCompareHtml.Enabled = true;
-            btnExportCompareCsv.Enabled  = true;
+            UpdateExportState();
+            btnChangesOnly.Enabled = c.ChangedCount + c.LeftOnlyCount + c.RightOnlyCount > 0;
         }
         catch (OperationCanceledException) { lblCompareStatus.Text = "Cancelled."; }
         catch (Exception ex)               { MessageBox.Show($"Compare error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
@@ -901,29 +1095,38 @@ public sealed partial class MainForm : Form
         progressCompare.Visible  = running;
         progressCompare.Style    = ProgressBarStyle.Marquee;
         // Don't disable export buttons here — they get enabled explicitly after compare completes
-        if (running)
-        {
-            btnExportCompareHtml.Enabled = false;
-            btnExportCompareCsv.Enabled  = false;
-        }
+        if (running) { btnExportHtml.Enabled = false; btnExportCsv.Enabled = false; }
+        else UpdateExportState();
         Cursor = running ? Cursors.WaitCursor : Cursors.Default;
     }
 
     // -----------------------------------------------------------------------
     // Compare tree
     // -----------------------------------------------------------------------
-    private void PopulateCompareTree(TreeView tree, ScanResult result, ComparisonResult comparison, bool isLeft)
+    private void PopulateCompareTree(TreeView tree, ScanResult result, ComparisonResult comparison, bool isLeft, bool changedOnly = false)
     {
         var diffMap = comparison.Diffs.ToDictionary(d => d.RelativePath, d => d, StringComparer.OrdinalIgnoreCase);
         tree.BeginUpdate();
         tree.Nodes.Clear();
-        if (result.Root != null) AddCompareNode(tree.Nodes, result.Root, diffMap, isLeft);
+        if (result.Root != null) AddCompareNode(tree.Nodes, result.Root, diffMap, isLeft, changedOnly);
         tree.EndUpdate();
-        if (tree.Nodes.Count > 0) tree.Nodes[0].Expand();
+        if (changedOnly) tree.ExpandAll();
+        else if (tree.Nodes.Count > 0) tree.Nodes[0].Expand();
     }
 
-    private static void AddCompareNode(TreeNodeCollection nodes, FolderNode folder, Dictionary<string, FolderDiff> diffMap, bool isLeft)
+    /// <summary>True if this folder, or anything beneath it, differs between the two paths.</summary>
+    private static bool HasDifference(FolderNode folder, Dictionary<string, FolderDiff> diffMap)
     {
+        if (diffMap.TryGetValue(folder.RelativePath, out var d) && d.Status != DiffStatus.Same) return true;
+        return folder.Children.Any(c => HasDifference(c, diffMap));
+    }
+
+    private static void AddCompareNode(TreeNodeCollection nodes, FolderNode folder, Dictionary<string, FolderDiff> diffMap, bool isLeft, bool changedOnly = false)
+    {
+        // Keep a folder when it differs itself or still has a differing descendant,
+        // so surviving nodes stay connected back to the root.
+        if (changedOnly && !HasDifference(folder, diffMap)) return;
+
         string prefix = folder.InheritanceBroken ? "⚠ " : "";
         var node = new TreeNode(prefix + folder.Name) { Tag = folder };
 
@@ -945,7 +1148,7 @@ public sealed partial class MainForm : Form
         // the diff status is more important. Just prefix the name with ⚠ (already done above).
         nodes.Add(node);
         foreach (var child in folder.Children)
-            AddCompareNode(node.Nodes, child, diffMap, isLeft);
+            AddCompareNode(node.Nodes, child, diffMap, isLeft, changedOnly);
     }
 
     // -----------------------------------------------------------------------
@@ -1015,7 +1218,13 @@ public sealed partial class MainForm : Form
     // -----------------------------------------------------------------------
     // Export
     // -----------------------------------------------------------------------
-    private void BtnExportHtml_Click(object? sender, EventArgs e) { if (_lastScanResult == null) { NoDataMsg(); return; } ExportAndOpenHtml(_lastScanResult); }
+    // The Export ribbon tab acts on whichever workspace you came from.
+    private void BtnExportHtml_Click(object? sender, EventArgs e)
+    {
+        if (_mode == 1) { ExportCompareHtml(); return; }
+        if (_lastScanResult == null) { NoDataMsg(); return; }
+        ExportAndOpenHtml(_lastScanResult);
+    }
 
     private async void ExportAndOpenHtml(ScanResult result)
     {
@@ -1036,13 +1245,14 @@ public sealed partial class MainForm : Form
         catch (Exception ex) { MessageBox.Show($"Export error:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally
         {
-            btnExportHtml.Enabled = _lastScanResult != null;
+            UpdateExportState();
             Cursor = Cursors.Default;
         }
     }
 
     private void BtnExportCsv_Click(object? sender, EventArgs e)
     {
+        if (_mode == 1) { BtnExportCompareCsv_Click(sender, e); return; }
         if (_lastScanResult == null) { NoDataMsg(); return; }
         using var dlg = new SaveFileDialog { Title = "Export Permissions as CSV", Filter = "CSV Files|*.csv", DefaultExt = "csv", FileName = $"NTFSFolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.csv" };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
@@ -1050,7 +1260,7 @@ public sealed partial class MainForm : Form
         catch (Exception ex) { MessageBox.Show($"CSV error:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 
-    private async void BtnExportCompareHtml_Click(object? sender, EventArgs e)
+    private async void ExportCompareHtml()
     {
         if (_lastCompareResult == null) { MessageBox.Show("No comparison data. Run a compare first.", "No Data", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
@@ -1060,7 +1270,7 @@ public sealed partial class MainForm : Form
 
         try
         {
-            btnExportCompareHtml.Enabled = false;
+            btnExportHtml.Enabled = false;
             Cursor = Cursors.WaitCursor;
             statusMain.Text = "Generating comparison report…";
 
@@ -1075,7 +1285,7 @@ public sealed partial class MainForm : Form
         catch (Exception ex) { MessageBox.Show($"Export error:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally
         {
-            btnExportCompareHtml.Enabled = _lastCompareResult != null;
+            UpdateExportState();
             Cursor = Cursors.Default;
         }
     }
@@ -1145,32 +1355,129 @@ public sealed partial class MainForm : Form
     // -----------------------------------------------------------------------
     // Control factory helpers
     // -----------------------------------------------------------------------
-    private static Label MakeLabel(string text, int x, int y, int w) =>
-        new() { Text = text, Location = new Point(x, y), Size = new Size(w, 20), Font = new Font("Segoe UI", 9.5f), ForeColor = ClrInk };
-
-    private static Button MakeSmallButton(string text, int x, int y, int w) =>
-        new() { Text = text, Location = new Point(x, y), Size = new Size(w, 26), BackColor = Color.FromArgb(102, 126, 234), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8.5f), Cursor = Cursors.Hand };
-
-    private static Button MakeButton(string text, int x, int y, int w) =>
-        new() { Text = text, Location = new Point(x, y), Size = new Size(w, 28), BackColor = Color.FromArgb(102, 126, 234), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9f), Cursor = Cursors.Hand };
-
-    // D2 slate primary button
-    private static Button MakeSlateButton(string text, int x, int y, int w, int h)
+    private static Label MakeLabel(string text, int x, int y, int w) => new()
     {
-        var b = new Button { Text = text, Location = new Point(x, y), Size = new Size(w, h), BackColor = ClrSlate, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8.5f), Cursor = Cursors.Hand, Anchor = AnchorStyles.Top | AnchorStyles.Left };
+        Text = text, Location = new Point(x, y), Size = new Size(w, 18),
+        Font = FntSmall, ForeColor = ClrInk, TextAlign = ContentAlignment.MiddleLeft
+    };
+
+    private static readonly Color ClrDisabledBg = Color.FromArgb(234, 234, 237);
+    private static readonly Color ClrDisabledFg = Color.FromArgb(163, 163, 172);
+
+    private static Button MakeFlatButton(string text, int x, int y, int w, int h, Color back, Color fore)
+    {
+        var b = new Button
+        {
+            Text = text, Location = new Point(x, y), Size = new Size(w, h),
+            BackColor = back, ForeColor = fore, FlatStyle = FlatStyle.Flat,
+            Font = FntSmall, Cursor = Cursors.Hand, UseVisualStyleBackColor = false
+        };
         b.FlatAppearance.BorderSize = 0;
+
+        // A flat button keeps its BackColor when disabled, so an unavailable
+        // action still reads as available. Mute it explicitly instead.
+        b.EnabledChanged += (s, e) =>
+        {
+            b.BackColor = b.Enabled ? back : ClrDisabledBg;
+            b.ForeColor = b.Enabled ? fore : ClrDisabledFg;
+            b.Cursor    = b.Enabled ? Cursors.Hand : Cursors.Default;
+        };
+        return b;
+    }
+
+    private static Button MakeSlateButton(string t, int x, int y, int w, int h)
+    {
+        var b = MakeFlatButton(t, x, y, w, h, ClrSlate, Color.White);
         b.FlatAppearance.MouseOverBackColor = ClrSlateDark;
         return b;
     }
 
-    // D2 light chrome / secondary button
-    private static Button MakeChromeButton(string text, int x, int y, int w, int h)
+    private static Button MakeGreenButton(string t, int x, int y, int w, int h)
     {
-        var b = new Button { Text = text, Location = new Point(x, y), Size = new Size(w, h), BackColor = ClrChrome, ForeColor = ClrChromeText, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8.5f), Cursor = Cursors.Hand, Anchor = AnchorStyles.Top | AnchorStyles.Left };
+        var b = MakeFlatButton(t, x, y, w, h, ClrGreen, Color.White);
+        b.Font = FntBodyB;
+        return b;
+    }
+
+    private static Button MakeAmberButton(string t, int x, int y, int w, int h)
+    {
+        var b = MakeFlatButton(t, x, y, w, h, ClrAmber, Color.White);
+        b.Font = FntBodyB;
+        return b;
+    }
+
+    private static Button MakeDangerButton(string t, int x, int y, int w, int h) =>
+        MakeFlatButton(t, x, y, w, h, ClrRed, Color.White);
+
+    private static Button MakeChromeButton(string t, int x, int y, int w, int h)
+    {
+        var b = MakeFlatButton(t, x, y, w, h, ClrChrome, ClrMuted);
         b.FlatAppearance.BorderColor = ClrChromeBrdr;
-        b.FlatAppearance.BorderSize = 1;
+        b.FlatAppearance.BorderSize  = 1;
         b.FlatAppearance.MouseOverBackColor = Color.FromArgb(228, 228, 231);
         return b;
+    }
+
+    // -----------------------------------------------------------------------
+    // Grids
+    // -----------------------------------------------------------------------
+    private static void StyleGrid(DataGridView dg)
+    {
+        dg.ColumnHeadersDefaultCellStyle.BackColor = ClrHdrBg;
+        dg.ColumnHeadersDefaultCellStyle.Font      = FntSmall;
+        dg.ColumnHeadersDefaultCellStyle.ForeColor = ClrMuted;
+        dg.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        dg.ColumnHeadersHeight         = 26;
+        dg.EnableHeadersVisualStyles   = false;
+        // Without this the header above the current cell paints in selection blue.
+        dg.ColumnHeadersDefaultCellStyle.SelectionBackColor = ClrHdrBg;
+        dg.ColumnHeadersDefaultCellStyle.SelectionForeColor = ClrMuted;
+        dg.DefaultCellStyle.SelectionBackColor = Color.FromArgb(207, 224, 244);
+        dg.DefaultCellStyle.SelectionForeColor = ClrSlate;
+    }
+
+    private static DataGridView MakeFolderGrid()
+    {
+        var dg = new DataGridView
+        {
+            Dock                  = DockStyle.Fill,
+            ReadOnly              = true,
+            SelectionMode         = DataGridViewSelectionMode.FullRowSelect,
+            AllowUserToAddRows    = false,
+            AllowUserToDeleteRows = false,
+            AllowUserToResizeRows = false,
+            RowHeadersVisible     = false,
+            BackgroundColor       = Color.White,
+            BorderStyle           = BorderStyle.None,
+            CellBorderStyle       = DataGridViewCellBorderStyle.SingleHorizontal,
+            GridColor             = ClrRule,
+            Font                  = FntBody,
+            RowTemplate           = { Height = 22 },
+            MultiSelect           = false,
+            ShowCellToolTips      = true,
+            ScrollBars            = ScrollBars.Both
+        };
+        StyleGrid(dg);
+        dg.DefaultCellStyle.Padding = new Padding(2, 1, 2, 1);
+
+        dg.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            Name = "Folder", HeaderText = "Folder",
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 100,
+            DefaultCellStyle = { WrapMode = DataGridViewTriState.False, Padding = new Padding(4, 0, 0, 0) }
+        });
+        dg.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            Name = "Perms", HeaderText = "Perms", Width = 52,
+            DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleRight, ForeColor = ClrSlate }
+        });
+        dg.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            Name = "Flags", HeaderText = "", Width = 28, MinimumWidth = 28,
+            Resizable = DataGridViewTriState.False,
+            DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleCenter }
+        });
+        return dg;
     }
 
     private static DataGridView MakePermGrid()
@@ -1181,21 +1488,17 @@ public sealed partial class MainForm : Form
             AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false,
             BackgroundColor = Color.White, BorderStyle = BorderStyle.None,
             CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
-            Font = new Font("Segoe UI", 9f), AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
-            GridColor = Color.FromArgb(230, 234, 240)
+            Font = FntBody, AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
+            GridColor = ClrRule
         };
-        dg.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(233, 236, 239);
-        dg.ColumnHeadersDefaultCellStyle.Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold);
-        dg.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(73, 80, 87);
-        dg.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-        dg.ColumnHeadersHeight = 28;
+        StyleGrid(dg);
         dg.DefaultCellStyle.Padding = new Padding(4, 2, 4, 2);
 
-        dg.Columns.Add(new DataGridViewTextBoxColumn { Name = "Identity",  HeaderText = "Identity",           AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 38, DefaultCellStyle = { WrapMode = DataGridViewTriState.True } });
-        dg.Columns.Add(new DataGridViewTextBoxColumn { Name = "Access",    HeaderText = "Access",             Width = 60 });
-        dg.Columns.Add(new DataGridViewTextBoxColumn { Name = "Rights",    HeaderText = "Rights",             AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 42, DefaultCellStyle = { WrapMode = DataGridViewTriState.True } });
-        dg.Columns.Add(new DataGridViewTextBoxColumn { Name = "Inherited", HeaderText = "Inherited",          Width = 100 });
-        dg.Columns.Add(new DataGridViewTextBoxColumn { Name = "Flags",     HeaderText = "Inheritance Flags",  AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 20 });
+        dg.Columns.Add(new DataGridViewTextBoxColumn { Name = "Identity",  HeaderText = "Identity",          AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 38, DefaultCellStyle = { WrapMode = DataGridViewTriState.True } });
+        dg.Columns.Add(new DataGridViewTextBoxColumn { Name = "Access",    HeaderText = "Access",            Width = 60 });
+        dg.Columns.Add(new DataGridViewTextBoxColumn { Name = "Rights",    HeaderText = "Rights",            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 42, DefaultCellStyle = { WrapMode = DataGridViewTriState.True } });
+        dg.Columns.Add(new DataGridViewTextBoxColumn { Name = "Inherited", HeaderText = "Inherited",         Width = 100 });
+        dg.Columns.Add(new DataGridViewTextBoxColumn { Name = "Flags",     HeaderText = "Inheritance Flags", AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill, FillWeight = 20 });
 
         dg.RowsAdded += (s, e) =>
         {
@@ -1210,17 +1513,8 @@ public sealed partial class MainForm : Form
     }
 
     // -----------------------------------------------------------------------
-    // Theme / Utility
+    // Utility
     // -----------------------------------------------------------------------
-    private void ApplyTheme()
-    {
-        foreach (TabPage tp in tabMain.TabPages)
-            tp.BackColor = Color.FromArgb(248, 249, 252);
-    }
-
-    private static void AnchorLR(Control c) => c.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-    private static void AnchorR(Control c)  => c.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-
     private static string ResolveOutputPath(string userPath, string scanRoot)
     {
         userPath = userPath.Trim();

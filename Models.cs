@@ -21,6 +21,8 @@ public sealed class FolderNode
     [JsonPropertyName("d")]  public int Depth { get; set; }
     [JsonPropertyName("bi")] public bool InheritanceBroken { get; set; }
     [JsonPropertyName("ad")] public bool AccessDenied { get; set; }
+    [JsonPropertyName("ow")] public string Owner { get; set; } = "";
+    [JsonPropertyName("mo")] public DateTime? Modified { get; set; }
     [JsonPropertyName("pm")] public List<PermissionEntry> Permissions { get; set; } = new();
 
     [JsonIgnore] public List<FolderNode> Children { get; set; } = new();
