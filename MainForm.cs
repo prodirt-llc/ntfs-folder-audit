@@ -1409,12 +1409,18 @@ public sealed partial class MainForm : Form
     private static Button MakeDangerButton(string t, int x, int y, int w, int h) =>
         MakeFlatButton(t, x, y, w, h, ClrRed, Color.White);
 
+    /// <summary>
+    /// Secondary button. Sits on white with ink-coloured text so it reads as
+    /// available — a grey-on-grey secondary is indistinguishable from disabled.
+    /// </summary>
     private static Button MakeChromeButton(string t, int x, int y, int w, int h)
     {
-        var b = MakeFlatButton(t, x, y, w, h, ClrChrome, ClrMuted);
+        var b = MakeFlatButton(t, x, y, w, h, Color.White, ClrInk);
         b.FlatAppearance.BorderColor = ClrChromeBrdr;
         b.FlatAppearance.BorderSize  = 1;
-        b.FlatAppearance.MouseOverBackColor = Color.FromArgb(228, 228, 231);
+        b.FlatAppearance.MouseOverBackColor = ClrChrome;
+        b.EnabledChanged += (s, e) =>
+            b.FlatAppearance.BorderColor = b.Enabled ? ClrChromeBrdr : Color.FromArgb(230, 230, 234);
         return b;
     }
 
