@@ -27,7 +27,7 @@ static class Program
         if (!IsRunningAsAdmin())
         {
             var result = MessageBox.Show(
-                "FolderAudit Pro works best with Administrator privileges.\n\n" +
+                "NTFS Folder Audit works best with Administrator privileges.\n\n" +
                 "Without elevation, access-denied errors will appear on restricted folders " +
                 "such as System Volume Information, $Recycle.Bin, and other protected paths.\n\n" +
                 "Relaunch as Administrator now?",

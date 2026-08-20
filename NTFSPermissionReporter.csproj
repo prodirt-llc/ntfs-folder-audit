@@ -8,16 +8,17 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishSingleFile>true</PublishSingleFile>
-    <AssemblyName>FolderAuditPro</AssemblyName>
+    <AssemblyName>NTFSFolderAudit</AssemblyName>
+    <AssemblyTitle>NTFS Folder Audit</AssemblyTitle>
     <RootNamespace>NTFSReport</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Version>1.0.0</Version>
     <Company>ProDirt</Company>
-    <Product>FolderAudit Pro</Product>
+    <Product>NTFS Folder Audit</Product>
     <Copyright>Copyright © 2025 ProDirt</Copyright>
-    <Description>FolderAudit Pro — NTFS permissions auditing and client reporting for MSPs</Description>
+    <Description>NTFS folder permissions auditing and client reporting for MSPs</Description>
     <Optimize>true</Optimize>
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>

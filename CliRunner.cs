@@ -192,7 +192,7 @@ public static class CliRunner
         {
             var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
             if (string.IsNullOrEmpty(desktop)) desktop = Path.GetTempPath();
-            opts.HtmlOutput = Path.Combine(desktop, $"FolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.html");
+            opts.HtmlOutput = Path.Combine(desktop, $"NTFSFolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.html");
         }
 
         return opts;
@@ -208,7 +208,7 @@ public static class CliRunner
     private static void PrintHelp()
     {
         Console.WriteLine("Usage:");
-        Console.WriteLine("  FolderAuditPro.exe --path <path> [options]");
+        Console.WriteLine("  NTFSFolderAudit.exe --path <path> [options]");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --path <path>       Root path to scan (local or UNC)");
@@ -219,15 +219,15 @@ public static class CliRunner
         Console.WriteLine("  --open              Open the HTML report after generating");
         Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine(@"  FolderAuditPro.exe --path \\server\share --output report.html --depth 3");
-        Console.WriteLine(@"  FolderAuditPro.exe --path C:\Shares --exclude-system --csv perms.csv --open");
+        Console.WriteLine(@"  NTFSFolderAudit.exe --path \\server\share --output report.html --depth 3");
+        Console.WriteLine(@"  NTFSFolderAudit.exe --path C:\Shares --exclude-system --csv perms.csv --open");
     }
 
     private static void WriteBanner()
     {
         Console.ForegroundColor = ConsoleColor.DarkMagenta;
         Console.WriteLine("================================================================");
-        Console.WriteLine("  FolderAudit Pro v1.0  —  ProDirt");
+        Console.WriteLine("  NTFS Folder Audit v1.0  —  ProDirt");
         Console.WriteLine("================================================================");
         Console.ResetColor();
         Console.WriteLine();
@@ -247,7 +247,7 @@ public static class CliRunner
     {
         if (string.IsNullOrEmpty(user)) return user;
         if (Directory.Exists(user))
-            return Path.Combine(user, $"FolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}{ext}");
+            return Path.Combine(user, $"NTFSFolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}{ext}");
         if (!user.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
             user += ext;
         return user;
