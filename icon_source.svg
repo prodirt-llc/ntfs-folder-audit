@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- folder back -->
+  <rect x="8" y="80" width="240" height="160" rx="14" fill="#5B7FD4"/>
+  <!-- folder tab -->
+  <path d="M8,80 L8,54 Q8,40 22,40 L100,40 Q118,40 126,58 L136,80 Z" fill="#5B7FD4"/>
+  <!-- folder front face -->
+  <rect x="8" y="104" width="240" height="136" rx="12" fill="#7B9FE8"/>
+  <!-- subtle top shine -->
+  <rect x="8" y="104" width="240" height="22" rx="12" fill="#8FAFE8" opacity="0.45"/>
+
+  <!-- lock body -->
+  <rect x="90" y="142" width="76" height="64" rx="10" fill="#1a1a2e"/>
+  <!-- lock shackle outer (dark) -->
+  <path d="M108,142 L108,118 Q108,92 128,92 Q148,92 148,118 L148,142" fill="none" stroke="#1a1a2e" stroke-width="16" stroke-linecap="round"/>
+  <!-- lock shackle inner (folder color cutout) -->
+  <path d="M108,142 L108,118 Q108,100 128,100 Q146,100 146,118 L146,142" fill="none" stroke="#7B9FE8" stroke-width="8" stroke-linecap="round"/>
+  <!-- keyhole circle -->
+  <circle cx="128" cy="166" r="10" fill="#5B7FD4"/>
+  <!-- keyhole slot -->
+  <rect x="124" y="166" width="8" height="16" rx="3" fill="#5B7FD4"/>
+</svg>
