@@ -1,135 +1,100 @@
 """
-Generate app.ico - draws each size individually for pixel-perfect results.
-Requires: pip install pillow
+Generates the NTFS Folder Audit app icon: app.ico, icon.png and icon.svg.
+
+    python make_icon.py          (requires: pip install pillow)
+
+The magnifier IS the icon rather than a badge on a folder. At taskbar size a
+folder plus a magnifier are two shapes competing for about 250 pixels and
+neither survives; one dominant silhouette, with its handle breaking the
+circle, stays recognisable all the way down to 16px.
+
+Everything is drawn at 8x and downsampled per target size, so each size gets
+real antialiasing instead of being a squashed copy of the 256px master. Sizes
+at or below 24px thicken the key and drop one tooth - at that scale the
+original proportions close up into a blob.
 """
+import os
 from PIL import Image, ImageDraw
 
-def draw_256(size=256):
-    img = Image.new("RGBA", (size, size), (0,0,0,0))
+HERE = os.path.dirname(os.path.abspath(__file__))
+SS   = 8
+
+# Amber ring reads against both a light Explorer list and a dark taskbar.
+# The app's near-black slate would match the UI chrome but disappears on dark.
+STEEL_BACK = (43, 74, 106, 255)
+AMBER      = (217, 119, 6, 255)
+WHITE      = (255, 255, 255, 255)
+
+ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
+
+# Geometry as fractions of the canvas, shared by the raster and SVG output.
+CX, CY, R  = .44, .42, .31     # lens centre and inner radius
+RING       = .085              # ring thickness
+HX, HY, HW = .87, .87, .15     # handle end point and width
+
+
+def draw(size, small):
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    fd, fl, lk = (75,110,195,255), (120,155,230,255), (26,26,46,255)
+    S = size
+    cx, cy, rr, lw = S*CX, S*CY, S*R, S*RING
 
-    # Folder back
-    d.rounded_rectangle([10,72,246,242], radius=14, fill=fd)
-    # Tab
-    d.polygon([(10,72),(10,50),(20,38),(104,38),(118,52),(132,72)], fill=fd)
-    # Folder face
-    d.rounded_rectangle([10,100,246,242], radius=12, fill=fl)
-    # Shine
-    d.rounded_rectangle([10,100,246,122], radius=12, fill=(145,175,235,80))
+    # Handle first, so the ring paints over the joint.
+    d.line([(cx + rr*.78, cy + rr*.78), (S*HX, S*HY)],
+           fill=AMBER, width=max(int(S*HW), 2))
+    d.ellipse([cx-rr-lw, cy-rr-lw, cx+rr+lw, cy+rr+lw], fill=AMBER)
+    d.ellipse([cx-rr, cy-rr, cx+rr, cy+rr], fill=WHITE)
 
-    # Shackle outer
-    d.arc([90,84,166,140], 180, 0, fill=lk, width=18)
-    d.rectangle([90,112,108,142], fill=lk)
-    d.rectangle([148,112,166,142], fill=lk)
-    # Lock body
-    d.rounded_rectangle([88,138,168,210], radius=10, fill=lk)
-    # Shackle inner cutout
-    d.arc([98,92,158,148], 180, 0, fill=fl, width=9)
-    d.rectangle([98,120,107,142], fill=fl)
-    d.rectangle([149,120,158,142], fill=fl)
-    # Keyhole
-    d.ellipse([117,155,139,177], fill=fd)
-    d.rounded_rectangle([124,166,132,184], radius=3, fill=fd)
+    # Key, sized off the lens interior so it scales with the ring.
+    u  = rr / 100.0
+    bx, br = cx - u*34, u*36
+    hr = u*15 if small else u*14
+    sh = u*20 if small else u*17
+    d.ellipse([bx-br, cy-br, bx+br, cy+br], fill=STEEL_BACK)
+    d.ellipse([bx-hr, cy-hr, bx+hr, cy+hr], fill=WHITE)
+    d.rounded_rectangle([bx+br*.55, cy-sh/2, cx+u*76, cy+sh/2],
+                        radius=max(1, int(u*6)), fill=STEEL_BACK)
+    tw = u*17 if small else u*14
+    for t in ([u*40] if small else [u*30, u*58]):
+        d.rounded_rectangle([bx+br*.55+t, cy+sh/2, bx+br*.55+t+tw, cy+sh/2+u*34],
+                            radius=max(1, int(u*5)), fill=STEEL_BACK)
     return img
 
-def draw_64(size=64):
-    img = Image.new("RGBA", (size, size), (0,0,0,0))
-    d = ImageDraw.Draw(img)
-    fd, fl, lk = (75,110,195,255), (120,155,230,255), (26,26,46,255)
 
-    d.rounded_rectangle([2,18,62,61], radius=4, fill=fd)
-    d.polygon([(2,18),(2,12),(6,9),(26,9),(30,13),(34,18)], fill=fd)
-    d.rounded_rectangle([2,25,62,61], radius=4, fill=fl)
+def render(size):
+    return draw(size * SS, small=size <= 24).resize((size, size), Image.LANCZOS)
 
-    d.arc([22,20,42,36], 180, 0, fill=lk, width=5)
-    d.rectangle([22,28,27,35], fill=lk)
-    d.rectangle([37,28,42,35], fill=lk)
-    d.rounded_rectangle([21,34,43,52], radius=3, fill=lk)
-    d.arc([25,22,39,38], 180, 0, fill=fl, width=3)
-    d.rectangle([25,30,28,35], fill=fl)
-    d.rectangle([36,30,39,35], fill=fl)
-    d.ellipse([28,38,36,46], fill=fd)
-    d.rectangle([30,42,34,48], fill=fd)
-    return img
 
-def draw_48(size=48):
-    img = Image.new("RGBA", (size, size), (0,0,0,0))
-    d = ImageDraw.Draw(img)
-    fd, fl, lk = (75,110,195,255), (120,155,230,255), (26,26,46,255)
+def svg(S=256):
+    hexof = lambda c: "#%02x%02x%02x" % c[:3]
+    cx, cy, rr, lw = S*CX, S*CY, S*R, S*RING
+    u  = rr / 100.0
+    bx, br, hr, sh = cx - u*34, u*36, u*14, u*17
+    sx = bx + br*.55
+    teeth = "".join(
+        f'\n  <rect x="{sx+t:.2f}" y="{cy+sh/2:.2f}" width="{u*14:.2f}" '
+        f'height="{u*34:.2f}" rx="{u*5:.2f}" fill="{hexof(STEEL_BACK)}"/>'
+        for t in (u*30, u*58))
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {S} {S}" width="{S}" height="{S}">
+  <!-- NTFS Folder Audit - generated by make_icon.py, do not hand-edit -->
+  <line x1="{cx+rr*.78:.2f}" y1="{cy+rr*.78:.2f}" x2="{S*HX:.2f}" y2="{S*HY:.2f}"
+        stroke="{hexof(AMBER)}" stroke-width="{S*HW:.2f}" stroke-linecap="round"/>
+  <circle cx="{cx:.2f}" cy="{cy:.2f}" r="{rr+lw:.2f}" fill="{hexof(AMBER)}"/>
+  <circle cx="{cx:.2f}" cy="{cy:.2f}" r="{rr:.2f}" fill="{hexof(WHITE)}"/>
+  <circle cx="{bx:.2f}" cy="{cy:.2f}" r="{br:.2f}" fill="{hexof(STEEL_BACK)}"/>
+  <circle cx="{bx:.2f}" cy="{cy:.2f}" r="{hr:.2f}" fill="{hexof(WHITE)}"/>
+  <rect x="{sx:.2f}" y="{cy-sh/2:.2f}" width="{cx+u*76-sx:.2f}" height="{sh:.2f}"
+        rx="{u*6:.2f}" fill="{hexof(STEEL_BACK)}"/>{teeth}
+</svg>
+"""
 
-    d.rounded_rectangle([2,14,46,46], radius=3, fill=fd)
-    d.polygon([(2,14),(2,9),(5,7),(20,7),(23,10),(26,14)], fill=fd)
-    d.rounded_rectangle([2,19,46,46], radius=3, fill=fl)
 
-    d.arc([16,15,32,27], 180, 0, fill=lk, width=4)
-    d.rectangle([16,21,20,26], fill=lk)
-    d.rectangle([28,21,32,26], fill=lk)
-    d.rounded_rectangle([15,25,33,39], radius=3, fill=lk)
-    d.arc([19,17,29,29], 180, 0, fill=fl, width=2)
-    d.rectangle([19,23,21,26], fill=fl)
-    d.rectangle([27,23,29,26], fill=fl)
-    d.ellipse([21,29,27,35], fill=fd)
-    d.rectangle([23,32,25,37], fill=fd)
-    return img
-
-def draw_32(size=32):
-    img = Image.new("RGBA", (size, size), (0,0,0,0))
-    d = ImageDraw.Draw(img)
-    fd, fl, lk = (75,110,195,255), (120,155,230,255), (26,26,46,255)
-
-    d.rounded_rectangle([1,9,31,31], radius=2, fill=fd)
-    d.polygon([(1,9),(1,6),(4,4),(13,4),(16,7),(18,9)], fill=fd)
-    d.rounded_rectangle([1,13,31,31], radius=2, fill=fl)
-
-    d.arc([10,10,22,18], 180, 0, fill=lk, width=3)
-    d.rectangle([10,14,13,17], fill=lk)
-    d.rectangle([19,14,22,17], fill=lk)
-    d.rounded_rectangle([9,16,23,26], radius=2, fill=lk)
-    d.arc([12,11,20,19], 180, 0, fill=fl, width=2)
-    d.rectangle([12,15,14,17], fill=fl)
-    d.rectangle([18,15,20,17], fill=fl)
-    d.ellipse([14,19,18,23], fill=fd)
-    d.rectangle([15,21,17,25], fill=fd)
-    return img
-
-def draw_16(size=16):
-    img = Image.new("RGBA", (size, size), (0,0,0,0))
-    d = ImageDraw.Draw(img)
-    fd, fl, lk = (75,110,195,255), (120,155,230,255), (26,26,46,255)
-
-    d.rounded_rectangle([1,5,15,15], radius=1, fill=fd)
-    d.polygon([(1,5),(1,3),(3,2),(7,2),(9,4),(10,5)], fill=fd)
-    d.rounded_rectangle([1,7,15,15], radius=1, fill=fl)
-
-    d.arc([5,5,11,9], 180, 0, fill=lk, width=2)
-    d.rectangle([5,7,7,9], fill=lk)
-    d.rectangle([9,7,11,9], fill=lk)
-    d.rounded_rectangle([4,8,12,14], radius=1, fill=lk)
-    d.ellipse([7,9,9,12], fill=fd)
-    return img
-
-# Also generate 128 by downscaling from 256
-img256 = draw_256(256)
-img128 = img256.resize((128,128), Image.LANCZOS)
-img64  = draw_64()
-img48  = draw_48()
-img32  = draw_32()
-img16  = draw_16()
-
-for sz, img in [(256,img256),(128,img128),(64,img64),(48,img48),(32,img32),(16,img16)]:
-    print(f"Ready {sz}x{sz}")
-
-ico_path = r"C:\Users\sglomb\source\NTFSPermissionReporter\app.ico"
-
-img256.save(
-    ico_path,
-    format="ICO",
-    sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)],
-    append_images=[img128, img64, img48, img32, img16]
-)
-
-# Verify sizes
-with Image.open(ico_path) as f:
-    print(f"\nEmbedded: {sorted(f.info.get('sizes',[]), reverse=True)}")
-print(f"Saved: {ico_path}")
+if __name__ == "__main__":
+    frames = [render(s) for s in ICO_SIZES]
+    ico = os.path.join(HERE, "app.ico")
+    frames[-1].save(ico, format="ICO", sizes=[(s, s) for s in ICO_SIZES])
+    frames[-1].save(os.path.join(HERE, "icon.png"))
+    with open(os.path.join(HERE, "icon.svg"), "w", encoding="utf-8") as fh:
+        fh.write(svg())
+    print(f"app.ico  {os.path.getsize(ico):,} bytes  sizes={ICO_SIZES}")
+    print("icon.png, icon.svg written")
