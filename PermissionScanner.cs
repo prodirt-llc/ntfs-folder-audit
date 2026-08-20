@@ -148,6 +148,31 @@ public sealed class PermissionScanner
         return result;
     }
 
+    /// <summary>
+    /// Owner as DOMAIN\Name, falling back to the raw SID when it can't be translated —
+    /// an orphaned owner SID from a deleted account is a finding worth showing, not hiding.
+    /// </summary>
+    private static string ReadOwner(DirectoryInfo dirInfo)
+    {
+        try
+        {
+            var owner = dirInfo.GetAccessControl(AccessControlSections.Owner);
+            try   { return owner.GetOwner(typeof(NTAccount))?.Value ?? ""; }
+            catch (IdentityNotMappedException)
+            {
+                var sid = owner.GetOwner(typeof(SecurityIdentifier))?.Value;
+                return sid == null ? "" : $"{sid}  (unresolved)";
+            }
+        }
+        catch { return ""; }
+    }
+
+    private static DateTime? ReadModified(DirectoryInfo dirInfo)
+    {
+        try { return dirInfo.LastWriteTime; }
+        catch { return null; }
+    }
+
     private static FolderNode ScanSingleFolder(
         string folderPath,
         string parentPath,
@@ -170,6 +195,12 @@ public sealed class PermissionScanner
             var dirInfo = new DirectoryInfo(folderPath);
             var acl = dirInfo.GetAccessControl(AccessControlSections.Access);
             node.InheritanceBroken = acl.AreAccessRulesProtected && depth > 0;
+
+            // Owner and timestamp are display-only detail. They are fetched in their
+            // own guards so a failure here can never cost us the ACL we just read —
+            // requesting the Owner section in the call above would risk exactly that.
+            node.Owner    = ReadOwner(dirInfo);
+            node.Modified = ReadModified(dirInfo);
 
             var rules = acl.GetAccessRules(true, true, typeof(NTAccount));
             int localPerms = 0;
