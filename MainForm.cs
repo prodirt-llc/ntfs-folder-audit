@@ -10,7 +10,6 @@ public sealed partial class MainForm : Form
     // -----------------------------------------------------------------------
     private readonly PermissionScanner _scanner        = new();
     private readonly ComparisonService _compareService = new();
-    private readonly LicenseManager    _license        = new();
 
     private ScanResult?       _lastScanResult;
     private ScanResult?       _lastLeftResult;
@@ -164,7 +163,6 @@ public sealed partial class MainForm : Form
         menuStrip1 = new MenuStrip { Font = new Font("Segoe UI", 9.5f) };
         var mnuFile  = new ToolStripMenuItem("File");
         var mnuTools = new ToolStripMenuItem("Tools");
-        var mnuLic   = new ToolStripMenuItem("License");
         var mnuHelp  = new ToolStripMenuItem("Help");
 
         mnuFile.DropDownItems.Add("New Scan", null, (s, e) => { tabMain.SelectedIndex = 0; txtScanPath.Focus(); });
@@ -180,13 +178,11 @@ public sealed partial class MainForm : Form
             if (!string.IsNullOrEmpty(txtScanPath.Text)) Clipboard.SetText(txtScanPath.Text);
         });
 
-        mnuLic.DropDownItems.Add("View License Info",    null, MnuLicenseInfo_Click);
-        mnuLic.DropDownItems.Add("Change License Key…", null, MnuChangeLicense_Click);
         mnuHelp.DropDownItems.Add("About NTFS Folder Audit", null, MnuAbout_Click);
         mnuHelp.DropDownItems.Add("ProDirt Website", null, (s, e) =>
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://prodirt-llc.github.io") { UseShellExecute = true }));
 
-        menuStrip1.Items.AddRange([mnuFile, mnuTools, mnuLic, mnuHelp]);
+        menuStrip1.Items.AddRange([mnuFile, mnuTools, mnuHelp]);
 
         // ================================================================
         // BRAND HEADER BAND (D2)
@@ -572,7 +568,7 @@ public sealed partial class MainForm : Form
     // -----------------------------------------------------------------------
     // Startup
     // -----------------------------------------------------------------------
-    private async void MainForm_Shown(object? sender, EventArgs e)
+    private void MainForm_Shown(object? sender, EventArgs e)
     {
         splitResults.Panel1MinSize = 200; splitResults.Panel2MinSize = 300;
         splitCompare.Panel1MinSize = 200; splitCompare.Panel2MinSize = 200;
@@ -582,13 +578,6 @@ public sealed partial class MainForm : Form
         try { splitCompare.SplitterDistance = splitCompare.Width  * 50 / 100; } catch { }
         try { splitLeft.SplitterDistance    = splitLeft.Height    * 65 / 100; } catch { }
         try { splitRight.SplitterDistance   = splitRight.Height   * 65 / 100; } catch { }
-
-        if (!_license.CheckStoredLicense())
-        {
-            using var lf = new LicenseForm(_license);
-            if (lf.ShowDialog(this) != DialogResult.OK) { Close(); return; }
-        }
-        statusVer.Text = "NTFS Folder Audit v1.0  |  Licensed";
     }
 
     // -----------------------------------------------------------------------
@@ -1148,19 +1137,6 @@ public sealed partial class MainForm : Form
     {
         using var dlg = new OpenFileDialog { Title = "Open HTML Report", Filter = "HTML Files|*.html|All Files|*.*" };
         if (dlg.ShowDialog(this) == DialogResult.OK) OpenFile(dlg.FileName);
-    }
-
-    private void MnuLicenseInfo_Click(object? sender, EventArgs e)
-    {
-        var msg = _license.IsActivated ? $"Status: ✓ Activated\nLicensed to: {_license.LicensedTo ?? "N/A"}" : "Status: Not activated";
-        MessageBox.Show(msg, "License Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
-
-    private void MnuChangeLicense_Click(object? sender, EventArgs e)
-    {
-        _license.Deactivate();
-        using var lf = new LicenseForm(_license);
-        if (lf.ShowDialog(this) == DialogResult.OK) statusVer.Text = "NTFS Folder Audit v1.0  |  Licensed";
     }
 
     private void MnuAbout_Click(object? sender, EventArgs e) =>
