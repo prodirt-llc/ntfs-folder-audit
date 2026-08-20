@@ -140,6 +140,9 @@ public static class HtmlGenerator
     // -----------------------------------------------------------------------
     private static string SerializeFolders(List<FolderNode> folders)
     {
+        // A folder whose parent is outside the scan has no ancestor in this data set
+        // to reconstruct its inherited entries from, so those get written out directly.
+        var known = new HashSet<string>(folders.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
         var sb = new StringBuilder("[");
         for (int i = 0; i < folders.Count; i++)
         {
@@ -172,6 +175,26 @@ public static class HtmlGenerator
             int inheritedCount = inherited_.Count;
             sb.Append("]");
             if (inheritedCount > 0) sb.Append(",\"ic\":").Append(inheritedCount);
+
+            // Scan root (or any folder whose parent wasn't scanned): emit the inherited
+            // entries verbatim, since walking ancestors would find nothing above it.
+            bool parentInScan = !string.IsNullOrEmpty(f.ParentPath) && known.Contains(f.ParentPath);
+            if (!parentInScan && inheritedCount > 0)
+            {
+                sb.Append(",\"ri\":[");
+                for (int j = 0; j < inherited_.Count; j++)
+                {
+                    var p = inherited_[j];
+                    if (j > 0) sb.Append(',');
+                    sb.Append("{\"i\":").Append(JsonStr(p.Identity));
+                    var rr = (!string.IsNullOrEmpty(p.RightsDecoded) && p.RightsDecoded != p.Rights)
+                        ? p.RightsDecoded : p.Rights;
+                    sb.Append(",\"r\":").Append(JsonStr(rr));
+                    if (p.AccessType != "Allow") sb.Append(",\"a\":").Append(JsonStr(p.AccessType));
+                    sb.Append('}');
+                }
+                sb.Append(']');
+            }
             sb.Append('}');
         }
         sb.Append(']');
@@ -288,6 +311,25 @@ public static class HtmlGenerator
         console.log('Loaded ' + flatData.length + ' folders');
         const folderMap = new Map();
         flatData.forEach(f => { f.children = []; folderMap.set(f.p, f); });
+
+        // Explicit entries on this folder, plus every entry it inherits. Ancestors
+        // inside the scan contribute their explicit entries; at the scan root the
+        // inherited set is read from 'ri', because nothing above it was scanned.
+        function resolvePerms(folder) {
+          const own = folder.pm || [];
+          const inherited = [];
+          let cur = folder;
+          while (cur) {
+            const anc = cur.pr ? folderMap.get(cur.pr) : null;
+            if (!anc) {
+              if (cur.ri) cur.ri.forEach(p => inherited.push({ p: p, src: cur.pr || cur.p }));
+              break;
+            }
+            if (anc.pm && anc.pm.length > 0) anc.pm.forEach(p => inherited.push({ p: p, src: anc.p }));
+            cur = anc;
+          }
+          return { own: own, inherited: inherited };
+        }
         flatData.forEach(f => { if (f.pr && folderMap.has(f.pr)) folderMap.get(f.pr).children.push(f); });
         const rootFolder = flatData.find(f => !f.pr || f.pr === f.p) || flatData[0];
 
@@ -325,15 +367,9 @@ public static class HtmlGenerator
           const count = document.createElement('span');
           count.className = 'perm-count' + (hasDeny ? ' has-deny' : '');
           // Show explicit count + inherited count from ancestors
-          const ownExplicit = folder.pm ? folder.pm.length : 0;
-          let ancInherited = 0;
-          let ancCur = folder;
-          while (ancCur && ancCur.pr) {
-            const anc = folderMap.get(ancCur.pr);
-            if (!anc) break;
-            ancInherited += anc.pm ? anc.pm.length : 0;
-            ancCur = anc;
-          }
+          const resolved = resolvePerms(folder);
+          const ownExplicit = resolved.own.length;
+          const ancInherited = resolved.inherited.length;
           count.textContent = ownExplicit + ancInherited;
           if (ownExplicit === 0 && ancInherited > 0) count.title = ancInherited + ' inherited';
           else if (ancInherited > 0) count.title = ownExplicit + ' explicit + ' + ancInherited + ' inherited';
@@ -368,18 +404,9 @@ public static class HtmlGenerator
           const panel = document.createElement('div');
           panel.className = 'permissions-panel';
           {
-            const explicitPerms = folder.pm || [];
-            // Walk up folderMap collecting all ancestor explicit perms
-            const inheritedRows = [];
-            let cur = folder;
-            while (cur && cur.pr) {
-              const anc = folderMap.get(cur.pr);
-              if (!anc) break;
-              if (anc.pm && anc.pm.length > 0) {
-                anc.pm.forEach(p => inheritedRows.push({ p, src: anc.p }));
-              }
-              cur = anc;
-            }
+            const resolvedPanel = resolvePerms(folder);
+            const explicitPerms = resolvedPanel.own;
+            const inheritedRows = resolvedPanel.inherited;
             let html = '<table><thead><tr><th>Identity</th><th>Rights</th><th>Access</th><th>Source</th></tr></thead><tbody>';
             if (explicitPerms.length > 0) {
               html += '<tr><td colspan="4" style="background:#f1f5f9;font-size:11px;font-weight:700;color:#334155;padding:4px 10px;letter-spacing:.5px">EXPLICIT PERMISSIONS</td></tr>';
@@ -535,21 +562,51 @@ public static class HtmlGenerator
 
         const leftByRel  = new Map();
         const rightByRel = new Map();
-        leftData.forEach(f  => { f.rel = getRelPath(f.p, leftRoot);  leftByRel.set(f.rel,  f); });
-        rightData.forEach(f => { f.rel = getRelPath(f.p, rightRoot); rightByRel.set(f.rel, f); });
+        leftData.forEach(f  => { f.side = 'L'; f.rel = getRelPath(f.p, leftRoot);  leftByRel.set(f.rel,  f); });
+        rightData.forEach(f => { f.side = 'R'; f.rel = getRelPath(f.p, rightRoot); rightByRel.set(f.rel, f); });
 
-        function permsKey(pm) { return (pm||[]).map(p => p.i+'|'+p.a+'|'+p.r).sort().join(';'); }
+        // Only EXPLICIT entries are serialised; inherited ones are reconstructed by
+        // walking up the ancestors, the same way the single-path report does it.
+        const leftByPath  = new Map(leftData.map(f  => [f.p, f]));
+        const rightByPath = new Map(rightData.map(f => [f.p, f]));
+
+        function resolvePerms(folder) {
+          const byPath = folder.side === 'L' ? leftByPath : rightByPath;
+          const own = folder.pm || [];
+          const inherited = [];
+          let cur = folder;
+          while (cur) {
+            const anc = cur.pr ? byPath.get(cur.pr) : null;
+            if (!anc) {
+              // Top of the scan - its inherited entries were serialised as 'ri'.
+              if (cur.ri) cur.ri.forEach(p => inherited.push({ p: p, src: cur.pr || cur.p }));
+              break;
+            }
+            if (anc.pm && anc.pm.length > 0) anc.pm.forEach(p => inherited.push({ p: p, src: anc.p }));
+            cur = anc;
+          }
+          return { own: own, inherited: inherited };
+        }
+
+        // Compare on the resolved set so the tree badges agree with the header totals,
+        // which are computed over every entry including inherited ones.
+        function permsKey(folder) {
+          const rp = resolvePerms(folder);
+          const keys = rp.own.map(p => p.i+'|'+(p.a||'Allow')+'|'+p.r+'|explicit');
+          rp.inherited.forEach(row => keys.push(row.p.i+'|'+(row.p.a||'Allow')+'|'+row.p.r+'|inherited'));
+          return keys.sort().join(';');
+        }
 
         leftData.forEach(f => {
           const r = rightByRel.get(f.rel);
           if (!r) f.diffStatus = 'left-only';
-          else if (permsKey(f.pm) === permsKey(r.pm)) f.diffStatus = 'same';
+          else if (permsKey(f) === permsKey(r)) f.diffStatus = 'same';
           else f.diffStatus = 'changed';
         });
         rightData.forEach(f => {
           const l = leftByRel.get(f.rel);
           if (!l) f.diffStatus = 'right-only';
-          else if (permsKey(f.pm) === permsKey(l.pm)) f.diffStatus = 'same';
+          else if (permsKey(f) === permsKey(l)) f.diffStatus = 'same';
           else f.diffStatus = 'changed';
         });
 
@@ -598,9 +655,12 @@ public static class HtmlGenerator
           name.textContent = folder.n || folder.p;
           name.title = folder.p;
 
+          const rp = resolvePerms(folder);
           const cnt = document.createElement('span');
           cnt.className = 'perm-count';
-          cnt.textContent = (folder.pm||[]).length;
+          cnt.textContent = rp.own.length + rp.inherited.length;
+          if (rp.own.length === 0 && rp.inherited.length > 0) cnt.title = rp.inherited.length + ' inherited';
+          else if (rp.inherited.length > 0) cnt.title = rp.own.length + ' explicit + ' + rp.inherited.length + ' inherited';
 
           const btn = document.createElement('button');
           btn.className = 'perm-button';
@@ -627,13 +687,27 @@ public static class HtmlGenerator
 
           const panel = document.createElement('div');
           panel.className = 'permissions-panel';
-          if (folder.pm && folder.pm.length > 0) {
-            let html = '<table><thead><tr><th>Identity</th><th>Rights</th><th>Access</th><th>Inherited</th></tr></thead><tbody>';
-            folder.pm.forEach(p => {
-              const ac = p.a === 'Allow' ? 'allow' : 'deny';
-              const inh = p.h ? '<span class="inherited-yes">Yes</span>' : '<span class="inherited-no">No</span>';
-              html += '<tr><td>' + escHtml(p.i) + '</td><td><span class="rights-decoded">' + escHtml(p.d||p.r) + '</span></td><td class="' + ac + '">' + p.a + '</td><td>' + inh + '</td></tr>';
-            });
+          {
+            let html = '<table><thead><tr><th>Identity</th><th>Rights</th><th>Access</th><th>Source</th></tr></thead><tbody>';
+            if (rp.own.length > 0) {
+              html += '<tr><td colspan="4" style="background:#f1f5f9;font-size:11px;font-weight:700;color:#334155;padding:4px 10px;letter-spacing:.5px">EXPLICIT PERMISSIONS</td></tr>';
+              rp.own.forEach(p => {
+                const ac = (p.a && p.a !== 'Allow') ? 'deny' : 'allow';
+                html += '<tr><td>' + escHtml(p.i) + '</td><td><span class="rights-decoded">' + escHtml(p.r) + '</span></td><td class="' + ac + '">' + (p.a||'Allow') + '</td><td><span class="inherited-no">Explicit</span></td></tr>';
+              });
+            }
+            if (rp.inherited.length > 0) {
+              html += '<tr><td colspan="4" style="background:#f8f9fc;font-size:11px;font-weight:700;color:#6c757d;padding:4px 10px;letter-spacing:.5px">INHERITED PERMISSIONS</td></tr>';
+              rp.inherited.forEach(row => {
+                const p = row.p;
+                const ac = (p.a && p.a !== 'Allow') ? 'deny' : 'allow';
+                const shortSrc = row.src.split('\\').pop() || row.src;
+                html += '<tr style="opacity:0.85"><td>' + escHtml(p.i) + '</td><td><span class="rights-decoded">' + escHtml(p.r) + '</span></td><td class="' + ac + '">' + (p.a||'Allow') + '</td><td><span class="inherited-yes" title="' + escHtml(row.src) + '">&#8593; ' + escHtml(shortSrc) + '</span></td></tr>';
+              });
+            }
+            if (rp.own.length === 0 && rp.inherited.length === 0) {
+              html += '<tr><td colspan="4" style="padding:10px;color:#6c757d">No permissions found' + (folder.ad ? ' (Access Denied)' : '') + '</td></tr>';
+            }
             html += '</tbody></table>';
             panel.innerHTML = html;
           }
