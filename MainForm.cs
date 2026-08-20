@@ -143,7 +143,7 @@ public sealed partial class MainForm : Form
     {
         SuspendLayout();
 
-        Text          = "FolderAudit Pro — ProDirt";
+        Text          = "NTFS Folder Audit — ProDirt";
         Size          = new Size(1300, 820);
         MinimumSize   = new Size(900, 600);
         StartPosition = FormStartPosition.CenterScreen;
@@ -182,7 +182,7 @@ public sealed partial class MainForm : Form
 
         mnuLic.DropDownItems.Add("View License Info",    null, MnuLicenseInfo_Click);
         mnuLic.DropDownItems.Add("Change License Key…", null, MnuChangeLicense_Click);
-        mnuHelp.DropDownItems.Add("About FolderAudit Pro", null, MnuAbout_Click);
+        mnuHelp.DropDownItems.Add("About NTFS Folder Audit", null, MnuAbout_Click);
         mnuHelp.DropDownItems.Add("ProDirt Website", null, (s, e) =>
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://prodirt-llc.github.io") { UseShellExecute = true }));
 
@@ -196,7 +196,7 @@ public sealed partial class MainForm : Form
 
         var lblBrandTitle = new Label
         {
-            Text      = "FolderAudit Pro",
+            Text      = "NTFS Folder Audit",
             AutoSize  = true,
             Location  = new Point(52, 9),
             Font      = new Font("Segoe UI", 13.5f, FontStyle.Regular),
@@ -220,7 +220,7 @@ public sealed partial class MainForm : Form
         // ================================================================
         statusStrip1 = new StatusStrip();
         statusMain   = new ToolStripStatusLabel("Ready") { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
-        statusVer    = new ToolStripStatusLabel("FolderAudit Pro v1.0") { ForeColor = Color.FromArgb(107, 114, 128) };
+        statusVer    = new ToolStripStatusLabel("NTFS Folder Audit v1.0") { ForeColor = Color.FromArgb(107, 114, 128) };
         statusStrip1.Items.AddRange([statusMain, statusVer]);
 
         // ================================================================
@@ -588,7 +588,7 @@ public sealed partial class MainForm : Form
             using var lf = new LicenseForm(_license);
             if (lf.ShowDialog(this) != DialogResult.OK) { Close(); return; }
         }
-        statusVer.Text = "FolderAudit Pro v1.0  |  Licensed";
+        statusVer.Text = "NTFS Folder Audit v1.0  |  Licensed";
     }
 
     // -----------------------------------------------------------------------
@@ -1055,7 +1055,7 @@ public sealed partial class MainForm : Form
     private void BtnExportCsv_Click(object? sender, EventArgs e)
     {
         if (_lastScanResult == null) { NoDataMsg(); return; }
-        using var dlg = new SaveFileDialog { Title = "Export Permissions as CSV", Filter = "CSV Files|*.csv", DefaultExt = "csv", FileName = $"FolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.csv" };
+        using var dlg = new SaveFileDialog { Title = "Export Permissions as CSV", Filter = "CSV Files|*.csv", DefaultExt = "csv", FileName = $"NTFSFolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.csv" };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         try { CsvExporter.Export(_lastScanResult, dlg.FileName); statusMain.Text = $"CSV saved: {dlg.FileName}"; }
         catch (Exception ex) { MessageBox.Show($"CSV error:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
@@ -1067,7 +1067,7 @@ public sealed partial class MainForm : Form
 
         // Save directly to desktop — no SaveFileDialog to avoid UI thread deadlock
         var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-        var outPath = Path.Combine(desktop, $"FolderAudit_Comparison_{DateTime.Now:yyyyMMdd_HHmmss}.html");
+        var outPath = Path.Combine(desktop, $"NTFSFolderAudit_Comparison_{DateTime.Now:yyyyMMdd_HHmmss}.html");
 
         try
         {
@@ -1094,7 +1094,7 @@ public sealed partial class MainForm : Form
     private void BtnExportCompareCsv_Click(object? sender, EventArgs e)
     {
         if (_lastCompareResult == null) { NoDataMsg(); return; }
-        using var dlg = new SaveFileDialog { Title = "Export Comparison as CSV", Filter = "CSV Files|*.csv", DefaultExt = "csv", FileName = $"FolderAudit_Comparison_{DateTime.Now:yyyyMMdd_HHmmss}.csv" };
+        using var dlg = new SaveFileDialog { Title = "Export Comparison as CSV", Filter = "CSV Files|*.csv", DefaultExt = "csv", FileName = $"NTFSFolderAudit_Comparison_{DateTime.Now:yyyyMMdd_HHmmss}.csv" };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         try { CsvExporter.ExportComparison(_lastCompareResult, dlg.FileName); statusMain.Text = $"CSV saved: {dlg.FileName}"; }
         catch (Exception ex) { MessageBox.Show($"CSV error:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
@@ -1107,7 +1107,7 @@ public sealed partial class MainForm : Form
 
     private void BtnBrowseOutput_Click(object? sender, EventArgs e)
     {
-        using var dlg = new SaveFileDialog { Title = "Save HTML Report As", Filter = "HTML Files|*.html", DefaultExt = "html", FileName = $"FolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.html", InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory) };
+        using var dlg = new SaveFileDialog { Title = "Save HTML Report As", Filter = "HTML Files|*.html", DefaultExt = "html", FileName = $"NTFSFolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.html", InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory) };
         if (dlg.ShowDialog(this) == DialogResult.OK) txtOutputPath.Text = dlg.FileName;
     }
 
@@ -1117,7 +1117,7 @@ public sealed partial class MainForm : Form
     {
         var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         if (string.IsNullOrEmpty(desktop)) desktop = Path.GetTempPath();
-        txtOutputPath.Text = Path.Combine(desktop, $"FolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.html");
+        txtOutputPath.Text = Path.Combine(desktop, $"NTFSFolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.html");
     }
 
     private void BrowseFolder(TextBox target)
@@ -1160,11 +1160,11 @@ public sealed partial class MainForm : Form
     {
         _license.Deactivate();
         using var lf = new LicenseForm(_license);
-        if (lf.ShowDialog(this) == DialogResult.OK) statusVer.Text = "FolderAudit Pro v1.0  |  Licensed";
+        if (lf.ShowDialog(this) == DialogResult.OK) statusVer.Text = "NTFS Folder Audit v1.0  |  Licensed";
     }
 
     private void MnuAbout_Click(object? sender, EventArgs e) =>
-        MessageBox.Show("FolderAudit Pro v1.0\n© 2025 ProDirt\n\nProfessional NTFS permissions auditing for MSPs.\nScan local and UNC paths, export interactive HTML reports,\ncompare two paths side-by-side, and detect broken inheritance.\n\nBuilt on .NET 8 — no installation required.", "About", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        MessageBox.Show("NTFS Folder Audit v1.0\n© 2025 ProDirt\n\nProfessional NTFS permissions auditing for MSPs.\nScan local and UNC paths, export interactive HTML reports,\ncompare two paths side-by-side, and detect broken inheritance.\n\nBuilt on .NET 8 — no installation required.", "About", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
     // -----------------------------------------------------------------------
     // Control factory helpers
@@ -1249,9 +1249,9 @@ public sealed partial class MainForm : Form
     {
         userPath = userPath.Trim();
         if (string.IsNullOrEmpty(userPath))
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), $"FolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.html");
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), $"NTFSFolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.html");
         if (Directory.Exists(userPath))
-            return Path.Combine(userPath, $"FolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.html");
+            return Path.Combine(userPath, $"NTFSFolderAudit_{DateTime.Now:yyyyMMdd_HHmmss}.html");
         if (!userPath.EndsWith(".html", StringComparison.OrdinalIgnoreCase)) userPath += ".html";
         return userPath;
     }

@@ -27,7 +27,7 @@ public sealed class LicenseForm : Form
     {
         SuspendLayout();
 
-        Text            = "FolderAudit Pro — License Activation";
+        Text            = "NTFS Folder Audit — License Activation";
         Size            = new Size(520, 400);
         MinimumSize     = new Size(520, 400);
         MaximumSize     = new Size(520, 400);
@@ -49,7 +49,7 @@ public sealed class LicenseForm : Form
         // --- Content area ---
         lblInstruction = new Label
         {
-            Text      = "Enter your Gumroad license key to activate\nFolderAudit Pro:",
+            Text      = "Enter your Gumroad license key to activate\nNTFS Folder Audit:",
             Location  = new Point(36, 120),
             Size      = new Size(440, 44),
             Font      = new Font("Segoe UI", 10f),
