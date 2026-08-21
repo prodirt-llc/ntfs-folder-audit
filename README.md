@@ -63,6 +63,18 @@ The download is large (~155 MB) because the .NET runtime is bundled inside it.
 That's the trade for "copy it to any server and it just runs", which matters more
 than download size when you're working on a client's file server.
 
+### "Windows protected your PC"
+
+The EXE isn't code-signed with an EV certificate, so the first time you run it,
+Windows SmartScreen may show a blue **"Windows protected your PC"** screen. That's
+SmartScreen not recognising a new, unsigned app yet — *not* a virus detection.
+Click **More info → Run anyway**. The warning fades once enough people have run
+the release.
+
+Don't take my word that it's clean — here's the independent
+[VirusTotal scan of the release EXE](https://www.virustotal.com/gui/file/3be489ffe45e5a104728001ed691a7f020cf88c69ac3a99a9011233509e757df)
+(70+ antivirus engines).
+
 ## Requirements
 
 - Windows 10, Windows 11, or Windows Server 2016+
