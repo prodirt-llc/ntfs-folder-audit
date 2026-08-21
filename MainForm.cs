@@ -1349,8 +1349,11 @@ public sealed partial class MainForm : Form
         if (dlg.ShowDialog(this) == DialogResult.OK) OpenFile(dlg.FileName);
     }
 
-    private void MnuAbout_Click(object? sender, EventArgs e) =>
-        MessageBox.Show("NTFS Folder Audit v1.0\n© 2025 ProDirt\n\nProfessional NTFS permissions auditing for MSPs.\nScan local and UNC paths, export interactive HTML reports,\ncompare two paths side-by-side, and detect broken inheritance.\n\nBuilt on .NET 8 — no installation required.", "About", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    private void MnuAbout_Click(object? sender, EventArgs e)
+    {
+        using var about = new AboutForm();
+        about.ShowDialog(this);
+    }
 
     // -----------------------------------------------------------------------
     // Control factory helpers
