@@ -107,6 +107,25 @@ The app icon is generated rather than hand-edited — `python make_icon.py`
 rebuilds `app.ico`, `icon.png` and `icon.svg` from one set of constants
 (needs `pillow`).
 
+## Licence
+
+[PolyForm Shield 1.0.0](LICENSE.md) — free to use, not free to resell.
+
+|  |  |
+|---|---|
+| Use it at work, on client systems, in paid engagements | **Yes** |
+| Share it, mirror it, hand the exe to a colleague | **Yes** |
+| Read the source, modify it for your own use | **Yes** |
+| Sell it, charge for access, or ship it inside a product you sell | **No** |
+
+**To be explicit for the MSPs and consultants this is aimed at:** using this tool
+to deliver IT work to your clients is exactly what it's for, and nothing in the
+licence restricts that. The noncompete covers selling *the software*, not using
+it to do your job.
+
+Note that this is a source-available licence, not an open-source one — GitHub
+will show it as "Other" rather than a recognised OSI licence.
+
 ## Support
 
 Bug reports and feature requests are welcome in
