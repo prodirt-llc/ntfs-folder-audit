@@ -6,6 +6,15 @@ and hand your client an interactive HTML report.
 
 ![NTFS Folder Audit scanning a folder tree](docs/screenshot.png)
 
+**See the actual output before you download anything:**
+[example scan report](https://prodirt-llc.github.io/ntfs-folder-audit/example-report.html)
+· [example comparison report](https://prodirt-llc.github.io/ntfs-folder-audit/example-comparison.html)
+
+Both are real reports produced by the tool from a sample file server, showing
+broken inheritance, an over-permissive share and a Deny rule. They are ordinary
+HTML files — open them, search them, click through the tree. That is exactly what
+you get out of a scan.
+
 ## Free. Actually free.
 
 No licence key. No trial timer. No feature gating. No account. No nag screens.
