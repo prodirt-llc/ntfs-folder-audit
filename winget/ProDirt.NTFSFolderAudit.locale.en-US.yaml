@@ -19,9 +19,10 @@ Description: |-
 
   Scan a local path or a UNC share to any depth and get a permissions grid
   showing identity, access type, decoded rights, inheritance state and flags.
-  Folders whose ACLs are set explicitly rather than inherited are flagged, and a
-  single click filters the tree down to only those - either a deliberate security
-  boundary or a mistake, and the first thing worth reviewing in any audit.
+  Folders whose ACLs are set directly on the folder, rather than inherited from
+  the parent, are flagged - and a single click filters the tree down to only
+  those. Each one is either a deliberate security boundary or a mistake, and they
+  are the first thing worth reviewing in any audit.
 
   Compare two paths side by side to catch permission drift between a share and
   its backup. Export a self-contained interactive HTML report you can email to a
